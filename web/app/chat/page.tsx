@@ -88,9 +88,12 @@ function ChatContent() {
 
   const localVideoRef  = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
-  const webrtcRef      = useRef<WebRTCManager>(new WebRTCManager())
-  const roomIdRef      = useRef<string | null>(null)
-  const settingsRef    = useRef<ChatSettings>(CHAT_SETTINGS_DEFAULTS)
+  const webrtcRef          = useRef<WebRTCManager>(new WebRTCManager())
+  const roomIdRef          = useRef<string | null>(null)
+  const settingsRef        = useRef<ChatSettings>(CHAT_SETTINGS_DEFAULTS)
+  const connectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Unique per page-load — server uses this to prevent self-match on socket reconnect
+  const sessionIdRef       = useRef<string>(crypto.randomUUID())
 
   const [status, setStatus]           = useState<Status>('connecting')
   const [isMuted, setIsMuted]         = useState(false)
@@ -102,9 +105,17 @@ function ChatContent() {
     settingsRef.current = loadChatSettings()
   }, [])
 
+  function clearConnectionTimer() {
+    if (connectionTimerRef.current) {
+      clearTimeout(connectionTimerRef.current)
+      connectionTimerRef.current = null
+    }
+  }
+
   const handleRemoteStream = useCallback((stream: MediaStream) => {
+    clearConnectionTimer() // real peer connected — cancel the timeout
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = stream
-  }, [])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const joinQueue = useCallback(() => {
     const s = settingsRef.current
@@ -113,6 +124,7 @@ function ChatContent() {
     roomIdRef.current = null
 
     socket.emit('join', {
+      sessionId:  sessionIdRef.current,
       // Privacy mode: hide your gender from server
       gender:     s.privacyMode ? undefined : (s.yourSex || undefined),
       // Boost URL param takes priority over settings lookingFor
@@ -125,11 +137,12 @@ function ChatContent() {
   const handleNext = useCallback(() => {
     const socket = getSocket()
     const webrtc = webrtcRef.current
+    clearConnectionTimer()
     if (roomIdRef.current) socket.emit('next', { roomId: roomIdRef.current })
     webrtc.closePeerConnection()
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
     joinQueue()
-  }, [joinQueue])
+  }, [joinQueue]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keyboard shortcut: Esc = Next
   useEffect(() => {
@@ -143,9 +156,7 @@ function ChatContent() {
     const socket = getSocket()
 
     async function init() {
-      if (localVideoRef.current) await webrtc.startLocalStream(localVideoRef.current)
-      socket.connect()
-
+      // Register all handlers BEFORE connecting so no event is missed
       socket.on('connect', joinQueue)
       socket.on('waiting', () => setStatus('waiting'))
 
@@ -154,8 +165,25 @@ function ChatContent() {
         setStatus('matched')
         if (settingsRef.current.sfxVolume) playMatchSound()
 
+        // Safety net: if no remote stream arrives within 8s, the match failed
+        // (self-match race condition, ICE stuck in 'new', peer immediately gone, etc.)
+        clearConnectionTimer()
+        connectionTimerRef.current = setTimeout(() => {
+          console.warn('[chat] connection timeout — no video after 8s, rejoining queue')
+          webrtc.closePeerConnection()
+          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
+          joinQueue()
+        }, 8000)
+
         const onIce = (c: RTCIceCandidate) => socket.emit('ice-candidate', { roomId, candidate: c.toJSON() })
-        webrtc.createPeerConnection(handleRemoteStream, onIce)
+        const onConnectionFailed = () => {
+          console.warn('[webrtc] ICE failed — rejoining queue')
+          clearConnectionTimer()
+          webrtc.closePeerConnection()
+          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
+          joinQueue()
+        }
+        webrtc.createPeerConnection(handleRemoteStream, onIce, onConnectionFailed)
         if (initiator) {
           const offer = await webrtc.createOffer()
           socket.emit('offer', { roomId, offer })
@@ -163,8 +191,15 @@ function ChatContent() {
       })
 
       socket.on('offer', async ({ offer }: { offer: RTCSessionDescriptionInit }) => {
-        const answer = await webrtc.handleOffer(offer)
-        socket.emit('answer', { roomId: roomIdRef.current, answer })
+        try {
+          const answer = await webrtc.handleOffer(offer)
+          socket.emit('answer', { roomId: roomIdRef.current, answer })
+        } catch (err) {
+          console.warn('[chat] offer handling failed — rejoining queue:', err)
+          webrtc.closePeerConnection()
+          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
+          joinQueue()
+        }
       })
 
       socket.on('answer', async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
@@ -175,26 +210,46 @@ function ChatContent() {
         await webrtc.addIceCandidate(candidate)
       })
 
+      // Unexpected socket disconnect (network, server restart, tab throttled in background)
+      // Socket.io will auto-reconnect; 'connect' will fire again → joinQueue()
+      socket.on('disconnect', (reason) => {
+        console.warn('[socket] disconnected:', reason)
+        if (reason !== 'io client disconnect') {
+          setStatus('connecting')
+          webrtc.closePeerConnection()
+          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
+        }
+      })
+
       socket.on('peer-disconnected', () => {
+        clearConnectionTimer()
         webrtc.closePeerConnection()
         if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
 
         if (settingsRef.current.autoRollVideo) {
-          // Auto-roll: silently find next person
           joinQueue()
         } else {
           if (settingsRef.current.sfxVolume) playDisconnectSound()
           setStatus('disconnected')
         }
       })
+
+      // Start camera before connecting — ensures local tracks are ready when
+      // createPeerConnection is called. Fault-tolerant: socket connects even if camera fails.
+      try {
+        if (localVideoRef.current) await webrtc.startLocalStream(localVideoRef.current)
+      } catch (err) {
+        console.warn('Camera unavailable:', err)
+      }
+
+      socket.connect()
     }
 
     init().catch(console.error)
 
     return () => {
-      socket.off('connect'); socket.off('waiting'); socket.off('matched')
-      socket.off('offer'); socket.off('answer'); socket.off('ice-candidate')
-      socket.off('peer-disconnected')
+      clearConnectionTimer()
+      socket.removeAllListeners()
       webrtc.destroy()
       disconnectSocket()
     }

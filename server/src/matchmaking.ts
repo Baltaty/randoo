@@ -4,6 +4,7 @@ type Gender = 'M' | 'F' | 'O'
 
 interface UserInfo {
   socketId: string
+  sessionId: string     // unique per browser tab/page-load — prevents self-match on reconnect
   gender?: Gender
   wantGender?: Gender
   countries: string[]   // empty = no filter (match anyone)
@@ -28,8 +29,16 @@ function countriesOk(a: string[], b: string[]): boolean {
   return a.some(c => b.includes(c))                        // share at least one country
 }
 
-function findMatch(user: UserInfo, ignoreCountry = false): UserInfo | null {
+function findMatch(user: UserInfo, io: Server, ignoreCountry = false): UserInfo | null {
   for (const candidate of queue) {
+    // Skip sockets that are no longer connected (stale due to reconnect race condition)
+    if (!io.sockets.sockets.has(candidate.socketId)) {
+      removeFromQueue(candidate.socketId)
+      clearTimer(candidate.socketId)
+      continue
+    }
+    // Never match two sockets from the same browser tab/page-load
+    if (candidate.sessionId === user.sessionId) continue
     if (!genderOk(user, candidate)) continue
     if (!ignoreCountry && !countriesOk(user.countries, candidate.countries)) continue
     return candidate
@@ -90,6 +99,7 @@ export function setupMatchmaking(io: Server) {
     console.log(`[+] ${socket.id}`)
 
     socket.on('join', (data: {
+      sessionId?: string
       gender?: string
       wantGender?: string
       countries?: string[]
@@ -99,16 +109,17 @@ export function setupMatchmaking(io: Server) {
       clearTimer(socket.id)
 
       const user: UserInfo = {
-        socketId:  socket.id,
-        gender:    data.gender    as Gender | undefined,
+        socketId:   socket.id,
+        sessionId:  typeof data.sessionId === 'string' ? data.sessionId : socket.id,
+        gender:     data.gender    as Gender | undefined,
         wantGender: data.wantGender as Gender | undefined,
-        countries: Array.isArray(data.countries) ? data.countries : [],
-        maxWait:   typeof data.maxWait === 'number' ? Math.max(1, data.maxWait) : 5,
-        joinedAt:  Date.now(),
+        countries:  Array.isArray(data.countries) ? data.countries : [],
+        maxWait:    typeof data.maxWait === 'number' ? Math.max(1, data.maxWait) : 5,
+        joinedAt:   Date.now(),
       }
 
       // Try strict match (gender + country)
-      const match = findMatch(user)
+      const match = findMatch(user, io)
       if (match) {
         createRoom(user, match, io)
         return
@@ -124,7 +135,7 @@ export function setupMatchmaking(io: Server) {
         waitTimers.delete(socket.id)
         if (!queue.find(u => u.socketId === socket.id)) return // already matched
 
-        const fallback = findMatch(user, true /* ignoreCountry */)
+        const fallback = findMatch(user, io, true /* ignoreCountry */)
         if (fallback) {
           createRoom(user, fallback, io)
         }

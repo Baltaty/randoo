@@ -1,12 +1,15 @@
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
-  { urls: 'stun:stun2.l.google.com:19302' },
 ]
 
 export class WebRTCManager {
   private pc: RTCPeerConnection | null = null
   private localStream: MediaStream | null = null
+
+  // ICE candidates queued before remote description is set
+  private pendingCandidates: RTCIceCandidateInit[] = []
+  private hasRemoteDescription = false
 
   async startLocalStream(videoEl: HTMLVideoElement): Promise<MediaStream> {
     this.localStream = await navigator.mediaDevices.getUserMedia({
@@ -20,9 +23,18 @@ export class WebRTCManager {
   createPeerConnection(
     onRemoteStream: (stream: MediaStream) => void,
     onIceCandidate: (candidate: RTCIceCandidate) => void,
-    onConnectionStateChange?: (state: RTCPeerConnectionState) => void
+    onConnectionFailed: () => void,
   ): RTCPeerConnection {
+    // Close any existing connection before creating a new one
+    if (this.pc) {
+      this.pc.oniceconnectionstatechange = null
+      this.pc.ontrack = null
+      this.pc.onicecandidate = null
+      this.pc.close()
+    }
     this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
+    this.pendingCandidates = []
+    this.hasRemoteDescription = false
 
     // Add local tracks
     this.localStream?.getTracks().forEach(track => {
@@ -39,10 +51,11 @@ export class WebRTCManager {
       if (event.candidate) onIceCandidate(event.candidate)
     }
 
-    // Connection state
-    if (onConnectionStateChange) {
-      this.pc.onconnectionstatechange = () => {
-        onConnectionStateChange(this.pc!.connectionState)
+    // Detect failed/disconnected ICE → caller will rejoin queue
+    this.pc.oniceconnectionstatechange = () => {
+      const state = this.pc?.iceConnectionState
+      if (state === 'failed' || state === 'closed') {
+        onConnectionFailed()
       }
     }
 
@@ -58,19 +71,34 @@ export class WebRTCManager {
 
   async handleOffer(offer: RTCSessionDescriptionInit): Promise<RTCSessionDescriptionInit> {
     if (!this.pc) throw new Error('PeerConnection not initialized')
+    if (this.pc.signalingState !== 'stable') {
+      console.warn('[webrtc] Ignoring offer in state:', this.pc.signalingState)
+      throw new Error('Wrong state for offer')
+    }
     await this.pc.setRemoteDescription(new RTCSessionDescription(offer))
+    await this._flushPendingCandidates()
     const answer = await this.pc.createAnswer()
     await this.pc.setLocalDescription(answer)
     return answer
   }
 
   async handleAnswer(answer: RTCSessionDescriptionInit): Promise<void> {
-    if (!this.pc) throw new Error('PeerConnection not initialized')
+    if (!this.pc) return
+    if (this.pc.signalingState !== 'have-local-offer') {
+      console.warn('[webrtc] Ignoring answer in state:', this.pc.signalingState)
+      return
+    }
     await this.pc.setRemoteDescription(new RTCSessionDescription(answer))
+    await this._flushPendingCandidates()
   }
 
   async addIceCandidate(candidate: RTCIceCandidateInit): Promise<void> {
     if (!this.pc) return
+    if (!this.hasRemoteDescription) {
+      // Queue until remote description is ready
+      this.pendingCandidates.push(candidate)
+      return
+    }
     try {
       await this.pc.addIceCandidate(new RTCIceCandidate(candidate))
     } catch {
@@ -78,23 +106,37 @@ export class WebRTCManager {
     }
   }
 
+  private async _flushPendingCandidates() {
+    this.hasRemoteDescription = true
+    for (const c of this.pendingCandidates) {
+      try {
+        await this.pc!.addIceCandidate(new RTCIceCandidate(c))
+      } catch {
+        // ignore
+      }
+    }
+    this.pendingCandidates = []
+  }
+
   toggleMute(): boolean {
     const audioTrack = this.localStream?.getAudioTracks()[0]
     if (!audioTrack) return false
     audioTrack.enabled = !audioTrack.enabled
-    return !audioTrack.enabled // returns isMuted
+    return !audioTrack.enabled
   }
 
   toggleCamera(): boolean {
     const videoTrack = this.localStream?.getVideoTracks()[0]
     if (!videoTrack) return false
     videoTrack.enabled = !videoTrack.enabled
-    return !videoTrack.enabled // returns isCameraOff
+    return !videoTrack.enabled
   }
 
   closePeerConnection() {
     this.pc?.close()
     this.pc = null
+    this.pendingCandidates = []
+    this.hasRemoteDescription = false
   }
 
   destroy() {
