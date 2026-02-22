@@ -14,11 +14,10 @@ export default function Home() {
   const [onlineCount, setOnlineCount] = useState<number | null>(null)
 
   useEffect(() => {
-    const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001'
     const fetchCount = () =>
-      fetch(`${SERVER_URL}/health`)
+      fetch('/api/online-count')
         .then(r => r.json())
-        .then(d => setOnlineCount(d.onlineCount ?? 0))
+        .then(d => setOnlineCount(d.count ?? 0))
         .catch(() => {})
 
     fetchCount()
