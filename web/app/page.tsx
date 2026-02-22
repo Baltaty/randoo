@@ -11,7 +11,21 @@ export default function Home() {
   const { t } = useI18n()
   const { user } = useAuth()
   const [interests, setInterests] = useState('')
-  const onlineCount = 10229
+  const [onlineCount, setOnlineCount] = useState<number | null>(null)
+
+  useEffect(() => {
+    fetch('/api/online-count')
+      .then(r => r.json())
+      .then(d => setOnlineCount(d.count))
+      .catch(() => {})
+    const id = setInterval(() => {
+      fetch('/api/online-count')
+        .then(r => r.json())
+        .then(d => setOnlineCount(d.count))
+        .catch(() => {})
+    }, 30_000)
+    return () => clearInterval(id)
+  }, [])
 
   function handleStart() {
     if (!user) { router.push('/auth?next=/chat'); return }
@@ -65,7 +79,7 @@ export default function Home() {
                 className="w-2 h-2 rounded-full flex-shrink-0"
                 style={{ background: 'var(--color-success)', boxShadow: '0 0 6px var(--color-success)' }}
               />
-              {t('home.online', { n: onlineCount.toLocaleString('en-US') })}
+              {onlineCount === null ? '…' : t('home.online', { n: onlineCount.toLocaleString('en-US') })}
             </div>
           </div>
 

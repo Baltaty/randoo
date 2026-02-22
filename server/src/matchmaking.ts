@@ -144,8 +144,11 @@ function getPeer(socketId: string, roomId: string): string | null {
 // ── Setup ────────────────────────────────────
 
 export function setupMatchmaking(io: Server) {
+  const broadcastCount = () => io.emit('online-count', io.engine.clientsCount)
+
   io.on('connection', (socket: Socket) => {
     console.log(`[+] ${socket.id}`)
+    broadcastCount()
 
     socket.on('join', async (data: {
       sessionId?:  string
@@ -233,6 +236,7 @@ export function setupMatchmaking(io: Server) {
       clearTimer(socket.id)
       leaveRoom(socket.id, io)
       console.log(`[-] ${socket.id}`)
+      broadcastCount()
     })
   })
 }

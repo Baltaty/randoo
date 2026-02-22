@@ -124,7 +124,7 @@ function ChatContent() {
   const [matchToast, setMatchToast]       = useState<string | null>(null)
   const matchToastTimerRef                = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [boostSecsLeft, setBoostSecsLeft] = useState<number | null>(null)
-  const onlineCount = 10229
+  const [onlineCount, setOnlineCount]     = useState<number | null>(null)
 
   // Load settings once on mount
   useEffect(() => {
@@ -242,6 +242,7 @@ function ChatContent() {
       // Register all handlers BEFORE connecting so no event is missed
       socket.on('connect', joinQueue)
       socket.on('waiting', () => setStatus('waiting'))
+      socket.on('online-count', (n: number) => setOnlineCount(n))
 
       socket.on('matched', async ({ roomId, initiator, peerCountry }: { roomId: string; initiator: boolean; peerCountry?: string }) => {
         roomIdRef.current = roomId
@@ -384,7 +385,7 @@ function ChatContent() {
             style={{ color: 'var(--theme-text)', borderColor: 'var(--theme-border)', background: 'var(--theme-surface)' }}>
             <span className="w-2 h-2 rounded-full flex-shrink-0"
               style={{ background: 'var(--color-success)', boxShadow: '0 0 6px var(--color-success)' }} />
-            {t('chat.online', { n: onlineCount.toLocaleString('en-US') })}
+            {onlineCount === null ? '…' : t('chat.online', { n: onlineCount.toLocaleString('en-US') })}
           </div>
 
           {/* Boost button — hidden when boost is active (banner shown instead) */}

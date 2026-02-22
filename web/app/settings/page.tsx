@@ -573,7 +573,31 @@ function ProfileTab({
   email?: string
 }) {
   const { t } = useI18n()
-  const [deleteStep, setDeleteStep] = useState<'idle' | 'confirm' | 'done'>('idle')
+  const router = useRouter()
+  const { signOut } = useAuth()
+  const [deleteStep, setDeleteStep] = useState<'idle' | 'confirm' | 'deleting' | 'done'>('idle')
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  async function handleDelete() {
+    setDeleteStep('deleting')
+    setDeleteError(null)
+    try {
+      const res = await fetch('/api/account', { method: 'DELETE' })
+      if (!res.ok) {
+        const d = await res.json()
+        setDeleteError(d.error ?? 'Failed to delete account')
+        setDeleteStep('confirm')
+        return
+      }
+      localStorage.clear()
+      await signOut()
+      setDeleteStep('done')
+      setTimeout(() => router.push('/'), 2000)
+    } catch {
+      setDeleteError('Network error, please try again')
+      setDeleteStep('confirm')
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -664,13 +688,17 @@ function ProfileTab({
                     {t('settings.delete.cancel')}
                   </button>
                   <button
-                    onClick={() => setDeleteStep('done')}
-                    className="flex-1 py-2.5 rounded-full text-sm font-bold text-white transition-all active:scale-95"
+                    onClick={handleDelete}
+                    disabled={deleteStep === 'deleting'}
+                    className="flex-1 py-2.5 rounded-full text-sm font-bold text-white transition-all active:scale-95 disabled:opacity-60"
                     style={{ background: 'var(--color-error)' }}
                   >
-                    {t('settings.delete.yes')}
+                    {deleteStep === 'deleting' ? '…' : t('settings.delete.yes')}
                   </button>
                 </div>
+                {deleteError && (
+                  <p className="text-xs mt-2 text-center" style={{ color: 'var(--color-error)' }}>{deleteError}</p>
+                )}
               </div>
             )}
 

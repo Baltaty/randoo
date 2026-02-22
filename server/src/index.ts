@@ -12,12 +12,17 @@ const ALLOWED_ORIGINS = [
 
 const app = express()
 app.use(cors({ origin: ALLOWED_ORIGINS }))
-app.get('/health', (_req, res) => res.json({ status: 'ok', queue: 'running' }))
 
 const httpServer = createServer(app)
 const io = new Server(httpServer, {
   cors: { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST'] },
 })
+
+// Health endpoint — exposes live online count
+app.get('/health', (_req, res) => res.json({
+  status: 'ok',
+  onlineCount: io.engine.clientsCount,
+}))
 
 setupMatchmaking(io)
 
