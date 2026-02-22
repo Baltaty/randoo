@@ -670,7 +670,7 @@ function ProfileTab({
               </>
             )}
 
-            {deleteStep === 'confirm' && (
+            {(deleteStep === 'confirm' || deleteStep === 'deleting') && (
               <div
                 className="rounded-2xl p-4"
                 style={{ background: 'rgba(240,32,49,0.08)', border: '1px solid rgba(240,32,49,0.25)' }}
