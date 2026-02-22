@@ -26,7 +26,9 @@ export default function Home() {
         <div className="text-center">
           <div className="flex items-center justify-center gap-3 mb-3">
             <svg width="36" height="44" viewBox="0 0 44 52" fill="none">
-              <path d="M26 0L0 30H18L18 52L44 22H26L26 0Z" fill="var(--theme-text)"/>
+              <path d="M 10 18 C 10 8 34 8 34 18 C 34 26 24 28 22 32"
+                stroke="var(--theme-text)" strokeWidth="9" strokeLinecap="round"/>
+              <circle cx="22" cy="46" r="5" fill="var(--theme-text)"/>
             </svg>
             <span
               className="font-bold tracking-tighter-xl"

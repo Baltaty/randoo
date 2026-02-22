@@ -293,7 +293,9 @@ function ChatContent() {
         {/* Logo */}
         <button onClick={() => router.push('/')} className="flex items-center gap-2.5 hover:opacity-80 transition-opacity">
           <svg width="22" height="26" viewBox="0 0 44 52" fill="none">
-            <path d="M26 0L0 30H18L18 52L44 22H26L26 0Z" fill="var(--theme-accent)"/>
+            <path d="M 10 18 C 10 8 34 8 34 18 C 34 26 24 28 22 32"
+              stroke="var(--theme-accent)" strokeWidth="9" strokeLinecap="round"/>
+            <circle cx="22" cy="46" r="5" fill="var(--theme-accent)"/>
           </svg>
           <span className="font-bold text-xl" style={{ letterSpacing: '-0.5px', color: 'var(--theme-text)' }}>randoo</span>
         </button>
