@@ -5,10 +5,13 @@ import { Server } from 'socket.io'
 import cors from 'cors'
 import { setupMatchmaking } from './matchmaking'
 
-const ALLOWED_ORIGINS = [
-  'https://randoo-psi.vercel.app',
-  'http://localhost:3000',
-]
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
+  : [
+      'https://randoo-psi.vercel.app',
+      'https://randoo.app',
+      'http://localhost:3000',
+    ]
 
 const app = express()
 app.use(cors({ origin: ALLOWED_ORIGINS }))
