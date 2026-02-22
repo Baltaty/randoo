@@ -10,10 +10,17 @@ export default function Home() {
   const router = useRouter()
   const { t } = useI18n()
   const { user } = useAuth()
-  const [tags, setTags]         = useState<string[]>([])
+  const [tags, setTags]         = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('randoo-interests') ?? '[]') } catch { return [] }
+  })
   const [tagInput, setTagInput] = useState('')
   const [onlineCount, setOnlineCount] = useState<number | null>(null)
   const tagInputRef = useRef<HTMLInputElement>(null)
+
+  // Persist tags to localStorage whenever they change
+  useEffect(() => {
+    localStorage.setItem('randoo-interests', JSON.stringify(tags))
+  }, [tags])
 
   useEffect(() => {
     const fetchCount = () =>
