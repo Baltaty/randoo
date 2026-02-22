@@ -14,16 +14,15 @@ export default function Home() {
   const [onlineCount, setOnlineCount] = useState<number | null>(null)
 
   useEffect(() => {
-    fetch('/api/online-count')
-      .then(r => r.json())
-      .then(d => setOnlineCount(d.count))
-      .catch(() => {})
-    const id = setInterval(() => {
-      fetch('/api/online-count')
+    const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001'
+    const fetchCount = () =>
+      fetch(`${SERVER_URL}/health`)
         .then(r => r.json())
-        .then(d => setOnlineCount(d.count))
+        .then(d => setOnlineCount(d.onlineCount ?? 0))
         .catch(() => {})
-    }, 30_000)
+
+    fetchCount()
+    const id = setInterval(fetchCount, 30_000)
     return () => clearInterval(id)
   }, [])
 
