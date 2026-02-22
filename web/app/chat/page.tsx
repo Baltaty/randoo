@@ -93,7 +93,8 @@ function ChatContent() {
   const { t } = useI18n()
 
   // URL params from boost page override settings
-  const urlWantGender = searchParams.get('wantGender') || undefined
+  const urlWantGender  = searchParams.get('wantGender') || undefined
+  const urlBoostToken  = searchParams.get('boost')      || undefined
 
   const localVideoRef  = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
@@ -139,12 +140,13 @@ function ChatContent() {
       privacyMode: s.privacyMode,
       // Privacy mode: hide your gender from server
       gender:      s.privacyMode ? undefined : (s.yourSex || undefined),
-      // Boost URL param takes priority over settings lookingFor
+      // Boost token (from Stripe payment) unlocks wantGender filter server-side
+      boostToken:  urlBoostToken,
       wantGender:  urlWantGender ?? (s.lookingFor === 'all' ? undefined : s.lookingFor),
       countries:   s.countries,
       maxWait:     s.maxWait,
     })
-  }, [urlWantGender])
+  }, [urlWantGender, urlBoostToken])
 
   const handleNext = useCallback(() => {
     const socket = getSocket()

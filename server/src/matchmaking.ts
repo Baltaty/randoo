@@ -4,14 +4,38 @@ import geoip from 'geoip-lite'
 type Gender = 'M' | 'F' | 'O'
 
 interface UserInfo {
-  socketId: string
-  sessionId: string     // unique per browser tab/page-load — prevents self-match on reconnect
-  country?: string      // ISO 3166-1 alpha-2, undefined if privacy mode or unknown IP
-  gender?: Gender
-  wantGender?: Gender
-  countries: string[]   // empty = no filter (match anyone)
-  maxWait: number       // seconds before country filter is relaxed
-  joinedAt: number
+  socketId:    string
+  sessionId:   string     // unique per browser tab/page-load — prevents self-match on reconnect
+  country?:    string     // ISO 3166-1 alpha-2, undefined if privacy mode or unknown IP
+  gender?:     Gender
+  wantGender?: Gender     // only set if boost token is valid
+  boostActive: boolean
+  countries:   string[]  // empty = no filter (match anyone)
+  maxWait:     number    // seconds before country filter is relaxed
+  joinedAt:    number
+}
+
+// ── Boost token verification ──────────────
+
+async function verifyBoostToken(token: string): Promise<{ wantGender: Gender } | null> {
+  const url  = process.env.SUPABASE_URL
+  const key  = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key || !token) return null
+
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/boost_sessions?session_token=eq.${encodeURIComponent(token)}&select=want_gender,expires_at&limit=1`,
+      { headers: { apikey: key, Authorization: `Bearer ${key}` } }
+    )
+    if (!res.ok) return null
+    const rows = await res.json() as Array<{ want_gender: string; expires_at: string }>
+    if (!rows.length) return null
+    const row = rows[0]
+    if (new Date(row.expires_at) < new Date()) return null
+    return { wantGender: row.want_gender as Gender }
+  } catch {
+    return null
+  }
 }
 
 const queue: UserInfo[] = []
@@ -113,27 +137,39 @@ export function setupMatchmaking(io: Server) {
   io.on('connection', (socket: Socket) => {
     console.log(`[+] ${socket.id}`)
 
-    socket.on('join', (data: {
-      sessionId?: string
-      gender?: string
+    socket.on('join', async (data: {
+      sessionId?:  string
+      gender?:     string
       wantGender?: string
-      countries?: string[]
-      maxWait?: number
+      boostToken?: string
+      countries?:  string[]
+      maxWait?:    number
       privacyMode?: boolean
     }) => {
       removeFromQueue(socket.id)
       clearTimer(socket.id)
 
+      // Verify boost token — only then allow wantGender filter
+      let boostActive = false
+      let wantGender: Gender | undefined
+      if (data.boostToken) {
+        const boost = await verifyBoostToken(data.boostToken)
+        if (boost) {
+          boostActive = true
+          wantGender  = boost.wantGender
+        }
+      }
+
       const user: UserInfo = {
-        socketId:   socket.id,
-        sessionId:  typeof data.sessionId === 'string' ? data.sessionId : socket.id,
-        // If privacy mode is on, don't resolve/store their country
-        country:    data.privacyMode ? undefined : resolveCountry(socket),
-        gender:     data.gender    as Gender | undefined,
-        wantGender: data.wantGender as Gender | undefined,
-        countries:  Array.isArray(data.countries) ? data.countries : [],
-        maxWait:    typeof data.maxWait === 'number' ? Math.max(1, data.maxWait) : 5,
-        joinedAt:   Date.now(),
+        socketId:    socket.id,
+        sessionId:   typeof data.sessionId === 'string' ? data.sessionId : socket.id,
+        country:     data.privacyMode ? undefined : resolveCountry(socket),
+        gender:      data.gender as Gender | undefined,
+        wantGender,
+        boostActive,
+        countries:   Array.isArray(data.countries) ? data.countries : [],
+        maxWait:     typeof data.maxWait === 'number' ? Math.max(1, data.maxWait) : 5,
+        joinedAt:    Date.now(),
       }
 
       // Try strict match (gender + country)
@@ -146,7 +182,7 @@ export function setupMatchmaking(io: Server) {
       // No match yet — add to queue
       queue.push(user)
       socket.emit('waiting')
-      console.log(`[queue] ${socket.id} waiting (${queue.length} in queue)`)
+      console.log(`[queue] ${socket.id} waiting (boost=${boostActive}, wantGender=${wantGender ?? 'any'}, queue=${queue.length})`)
 
       // After maxWait seconds, relax country filter and retry
       const timer = setTimeout(() => {

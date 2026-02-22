@@ -17,10 +17,26 @@ export default function BoostPage() {
   const router = useRouter()
   const { t } = useI18n()
   const [selectedPlan, setSelectedPlan] = useState<string>('30min')
-  const [wantGender, setWantGender] = useState<WantGender>('F')
+  const [wantGender, setWantGender]     = useState<WantGender>('F')
+  const [loading, setLoading]           = useState(false)
+  const [error, setError]               = useState<string | null>(null)
 
-  function handleBoost() {
-    router.push(`/chat?wantGender=${wantGender}`)
+  async function handleBoost() {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/create-checkout', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ plan: selectedPlan, wantGender }),
+      })
+      const data = await res.json()
+      if (!res.ok || !data.url) throw new Error(data.error ?? 'Checkout failed')
+      window.location.href = data.url
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Something went wrong')
+      setLoading(false)
+    }
   }
 
   return (
@@ -106,18 +122,30 @@ export default function BoostPage() {
           })}
         </div>
 
+        {/* Error */}
+        {error && (
+          <p className="text-sm text-center mb-4" style={{ color: 'var(--color-error)' }}>{error}</p>
+        )}
+
         {/* CTA */}
         <button
           onClick={handleBoost}
-          className="w-full py-5 rounded-full font-semibold text-lg transition-all active:scale-[0.98] hover:brightness-95 flex items-center justify-center gap-2"
+          disabled={loading}
+          className="w-full py-5 rounded-full font-semibold text-lg transition-all active:scale-[0.98] hover:brightness-95 flex items-center justify-center gap-2 disabled:opacity-60"
           style={{ background: 'var(--theme-accent)', color: 'var(--theme-btn-fg)' }}
         >
-          <span>⚡</span>
-          <span>{t('boost.cta')}</span>
+          {loading ? (
+            <span>Redirecting…</span>
+          ) : (
+            <>
+              <span>⚡</span>
+              <span>{t('boost.cta')}</span>
+            </>
+          )}
         </button>
 
         <p className="mt-3 text-xs text-center" style={{ color: 'var(--theme-text-muted)' }}>
-          {t('boost.soon')}
+          Secure payment via Stripe
         </p>
       </div>
 
