@@ -16,7 +16,6 @@ function AuthForm() {
   const [password, setPassword] = useState('')
   const [error, setError]     = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [done, setDone]       = useState(false) // signup success
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -28,7 +27,9 @@ function AuthForm() {
     if (mode === 'signup') {
       const { error } = await supabase.auth.signUp({ email, password })
       if (error) { setError(error.message); setLoading(false); return }
-      setDone(true)
+      // Email confirmation is disabled — user is immediately active, redirect now
+      router.push(next)
+      router.refresh()
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) { setError(error.message); setLoading(false); return }
@@ -42,7 +43,6 @@ function AuthForm() {
   function switchMode(m: Mode) {
     setMode(m)
     setError(null)
-    setDone(false)
   }
 
   return (
@@ -78,64 +78,47 @@ function AuthForm() {
           ))}
         </div>
 
-        {done ? (
-          /* Signup success — email confirmation */
-          <div className="text-center py-8 px-4 rounded-3xl"
-            style={{ background: 'var(--theme-surface)', border: '1px solid var(--theme-border)' }}>
-            <div className="text-4xl mb-4">📬</div>
-            <p className="font-semibold mb-1" style={{ color: 'var(--theme-text)' }}>Check your inbox</p>
-            <p className="text-sm" style={{ color: 'var(--theme-text-muted)' }}>
-              We sent a confirmation link to <strong>{email}</strong>. Click it to activate your account.
-            </p>
-            <button onClick={() => { setDone(false); setMode('signin') }}
-              className="mt-5 text-sm font-medium underline"
-              style={{ color: 'var(--theme-accent)' }}>
-              Back to sign in
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleSubmit} className="flex flex-col gap-3">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
 
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              className="w-full px-5 py-4 rounded-2xl text-sm outline-none"
-              style={{
-                background: 'var(--theme-surface)',
-                border: '1px solid var(--theme-border)',
-                color: 'var(--theme-text)',
-              }}
-            />
+          <input
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+            className="w-full px-5 py-4 rounded-2xl text-sm outline-none"
+            style={{
+              background: 'var(--theme-surface)',
+              border: '1px solid var(--theme-border)',
+              color: 'var(--theme-text)',
+            }}
+          />
 
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              minLength={6}
-              className="w-full px-5 py-4 rounded-2xl text-sm outline-none"
-              style={{
-                background: 'var(--theme-surface)',
-                border: '1px solid var(--theme-border)',
-                color: 'var(--theme-text)',
-              }}
-            />
+          <input
+            type="password"
+            placeholder="Password"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            required
+            minLength={6}
+            className="w-full px-5 py-4 rounded-2xl text-sm outline-none"
+            style={{
+              background: 'var(--theme-surface)',
+              border: '1px solid var(--theme-border)',
+              color: 'var(--theme-text)',
+            }}
+          />
 
-            {error && (
-              <p className="text-sm px-2" style={{ color: 'var(--color-error)' }}>{error}</p>
-            )}
+          {error && (
+            <p className="text-sm px-2" style={{ color: 'var(--color-error)' }}>{error}</p>
+          )}
 
-            <button type="submit" disabled={loading}
-              className="w-full py-4 rounded-2xl font-semibold text-base transition-all active:scale-[0.98] disabled:opacity-60 mt-1"
-              style={{ background: 'var(--theme-accent)', color: 'var(--theme-btn-fg)' }}>
-              {loading ? '…' : mode === 'signin' ? 'Sign in' : 'Create account'}
-            </button>
-          </form>
-        )}
+          <button type="submit" disabled={loading}
+            className="w-full py-4 rounded-2xl font-semibold text-base transition-all active:scale-[0.98] disabled:opacity-60 mt-1"
+            style={{ background: 'var(--theme-accent)', color: 'var(--theme-btn-fg)' }}>
+            {loading ? '…' : mode === 'signin' ? 'Sign in' : 'Create account'}
+          </button>
+        </form>
       </div>
     </div>
   )
