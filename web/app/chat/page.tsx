@@ -9,6 +9,15 @@ import { useI18n } from '@/contexts/I18nContext'
 
 type Status = 'connecting' | 'waiting' | 'matched' | 'disconnected'
 
+// ISO 3166-1 alpha-2 → flag emoji + display name
+function countryInfo(code: string): { flag: string; name: string } {
+  const flag = code.toUpperCase().split('').map(c =>
+    String.fromCodePoint(0x1F1E0 + c.charCodeAt(0) - 65)
+  ).join('')
+  const name = new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? code
+  return { flag, name }
+}
+
 // Subset of settings used in chat
 interface ChatSettings {
   autoRollVideo: boolean
@@ -95,9 +104,11 @@ function ChatContent() {
   // Unique per page-load — server uses this to prevent self-match on socket reconnect
   const sessionIdRef       = useRef<string>(crypto.randomUUID())
 
-  const [status, setStatus]           = useState<Status>('connecting')
-  const [isMuted, setIsMuted]         = useState(false)
-  const [isCameraOff, setIsCameraOff] = useState(false)
+  const [status, setStatus]               = useState<Status>('connecting')
+  const [isMuted, setIsMuted]             = useState(false)
+  const [isCameraOff, setIsCameraOff]     = useState(false)
+  const [matchToast, setMatchToast]       = useState<string | null>(null)
+  const matchToastTimerRef                = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onlineCount = 10229
 
   // Load settings once before socket connects
@@ -124,13 +135,14 @@ function ChatContent() {
     roomIdRef.current = null
 
     socket.emit('join', {
-      sessionId:  sessionIdRef.current,
+      sessionId:   sessionIdRef.current,
+      privacyMode: s.privacyMode,
       // Privacy mode: hide your gender from server
-      gender:     s.privacyMode ? undefined : (s.yourSex || undefined),
+      gender:      s.privacyMode ? undefined : (s.yourSex || undefined),
       // Boost URL param takes priority over settings lookingFor
-      wantGender: urlWantGender ?? (s.lookingFor === 'all' ? undefined : s.lookingFor),
-      countries:  s.countries,
-      maxWait:    s.maxWait,
+      wantGender:  urlWantGender ?? (s.lookingFor === 'all' ? undefined : s.lookingFor),
+      countries:   s.countries,
+      maxWait:     s.maxWait,
     })
   }, [urlWantGender])
 
@@ -160,10 +172,20 @@ function ChatContent() {
       socket.on('connect', joinQueue)
       socket.on('waiting', () => setStatus('waiting'))
 
-      socket.on('matched', async ({ roomId, initiator }: { roomId: string; initiator: boolean }) => {
+      socket.on('matched', async ({ roomId, initiator, peerCountry }: { roomId: string; initiator: boolean; peerCountry?: string }) => {
         roomIdRef.current = roomId
         setStatus('matched')
         if (settingsRef.current.sfxVolume) playMatchSound()
+
+        // Show country toast for 4 seconds
+        if (matchToastTimerRef.current) clearTimeout(matchToastTimerRef.current)
+        if (peerCountry) {
+          const { flag, name } = countryInfo(peerCountry)
+          setMatchToast(`You're now connected with a random stranger from ${name} ${flag}`)
+        } else {
+          setMatchToast(`You're now connected with a random stranger`)
+        }
+        matchToastTimerRef.current = setTimeout(() => setMatchToast(null), 4000)
 
         // Safety net: if no remote stream arrives within 8s, the match failed
         // (self-match race condition, ICE stuck in 'new', peer immediately gone, etc.)
@@ -223,6 +245,8 @@ function ChatContent() {
 
       socket.on('peer-disconnected', () => {
         clearConnectionTimer()
+        if (matchToastTimerRef.current) clearTimeout(matchToastTimerRef.current)
+        setMatchToast(null)
         webrtc.closePeerConnection()
         if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
 
@@ -249,6 +273,7 @@ function ChatContent() {
 
     return () => {
       clearConnectionTimer()
+      if (matchToastTimerRef.current) clearTimeout(matchToastTimerRef.current)
       socket.removeAllListeners()
       webrtc.destroy()
       disconnectSocket()
@@ -274,9 +299,9 @@ function ChatContent() {
         </button>
 
         {/* Right controls */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {/* Online count */}
-          <div className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold border"
+          <div className="flex items-center gap-1.5 px-2.5 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-semibold border whitespace-nowrap"
             style={{ color: 'var(--theme-text)', borderColor: 'var(--theme-border)', background: 'var(--theme-surface)' }}>
             <span className="w-2 h-2 rounded-full flex-shrink-0"
               style={{ background: 'var(--color-success)', boxShadow: '0 0 6px var(--color-success)' }} />
@@ -343,6 +368,17 @@ function ChatContent() {
                 <p className="text-white/30 text-sm">{t('chat.left.hint', { key: 'Esc' })}</p>
               </>
             )}
+          </div>
+        )}
+
+        {/* Match toast — appears at top when connected */}
+        {matchToast && (
+          <div className="absolute top-4 left-1/2 z-30 pointer-events-none"
+            style={{ transform: 'translateX(-50%)', animation: 'fadeInDown 0.3s ease' }}>
+            <div className="px-4 py-2.5 rounded-2xl text-sm font-medium text-white text-center max-w-xs"
+              style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)' }}>
+              {matchToast}
+            </div>
           </div>
         )}
 

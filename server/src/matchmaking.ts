@@ -1,10 +1,12 @@
 import { Server, Socket } from 'socket.io'
+import geoip from 'geoip-lite'
 
 type Gender = 'M' | 'F' | 'O'
 
 interface UserInfo {
   socketId: string
   sessionId: string     // unique per browser tab/page-load — prevents self-match on reconnect
+  country?: string      // ISO 3166-1 alpha-2, undefined if privacy mode or unknown IP
   gender?: Gender
   wantGender?: Gender
   countries: string[]   // empty = no filter (match anyone)
@@ -15,6 +17,18 @@ interface UserInfo {
 const queue: UserInfo[] = []
 const rooms = new Map<string, [string, string]>() // roomId -> [socketA, socketB]
 const waitTimers = new Map<string, ReturnType<typeof setTimeout>>()
+
+// ── IP → country ─────────────────────────────
+
+function resolveCountry(socket: Socket): string | undefined {
+  // In production behind a proxy (Railway, Vercel), the real IP is in x-forwarded-for
+  const forwarded = socket.handshake.headers['x-forwarded-for']
+  const rawIp = (typeof forwarded === 'string' ? forwarded.split(',')[0] : undefined)
+    ?? socket.handshake.address
+  const ip = rawIp?.replace(/^::ffff:/, '') // strip IPv4-mapped IPv6 prefix
+  if (!ip || ip === '127.0.0.1' || ip === '::1') return undefined
+  return geoip.lookup(ip)?.country ?? undefined
+}
 
 // ── Matching helpers ─────────────────────────
 
@@ -69,8 +83,9 @@ function createRoom(a: UserInfo, b: UserInfo, io: Server) {
   const roomId = `r_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   rooms.set(roomId, [a.socketId, b.socketId])
 
-  io.to(a.socketId).emit('matched', { roomId, initiator: true,  peerGender: b.gender })
-  io.to(b.socketId).emit('matched', { roomId, initiator: false, peerGender: a.gender })
+  // Only reveal a peer's country if they have a country resolved (privacy mode = no country sent)
+  io.to(a.socketId).emit('matched', { roomId, initiator: true,  peerGender: b.gender, peerCountry: b.country })
+  io.to(b.socketId).emit('matched', { roomId, initiator: false, peerGender: a.gender, peerCountry: a.country })
   console.log(`[match] ${a.socketId} <-> ${b.socketId} → ${roomId}`)
 }
 
@@ -104,6 +119,7 @@ export function setupMatchmaking(io: Server) {
       wantGender?: string
       countries?: string[]
       maxWait?: number
+      privacyMode?: boolean
     }) => {
       removeFromQueue(socket.id)
       clearTimer(socket.id)
@@ -111,6 +127,8 @@ export function setupMatchmaking(io: Server) {
       const user: UserInfo = {
         socketId:   socket.id,
         sessionId:  typeof data.sessionId === 'string' ? data.sessionId : socket.id,
+        // If privacy mode is on, don't resolve/store their country
+        country:    data.privacyMode ? undefined : resolveCountry(socket),
         gender:     data.gender    as Gender | undefined,
         wantGender: data.wantGender as Gender | undefined,
         countries:  Array.isArray(data.countries) ? data.countries : [],

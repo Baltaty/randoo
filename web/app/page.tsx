@@ -9,13 +9,11 @@ export default function Home() {
   const router = useRouter()
   const { t } = useI18n()
   const [interests, setInterests] = useState('')
-  const [videoMode, setVideoMode] = useState(true)
   const onlineCount = 10229
 
   function handleStart() {
     const params = new URLSearchParams()
     if (interests.trim()) params.set('interests', interests.trim())
-    if (!videoMode) params.set('mode', 'text')
     router.push(`/chat?${params.toString()}`)
   }
 
@@ -64,30 +62,6 @@ export default function Home() {
               />
               {t('home.online', { n: onlineCount.toLocaleString('en-US') })}
             </div>
-          </div>
-
-          {/* Row 2 : Video Mode toggle */}
-          <div className="flex justify-end">
-            <button
-              onClick={() => setVideoMode(v => !v)}
-              className="flex items-center gap-3 px-5 py-3 rounded-full text-sm font-semibold transition-colors backdrop-blur-sm"
-              style={{ color: 'var(--theme-text)', border: '1px solid var(--theme-border)', background: 'var(--theme-surface)' }}
-            >
-              <span>📹</span>
-              <span>{t('home.video_mode')}</span>
-              <span
-                className="relative inline-flex w-10 h-5 rounded-full transition-colors duration-200 flex-shrink-0"
-                style={{ background: videoMode ? 'var(--theme-text)' : 'var(--theme-border)' }}
-              >
-                <span
-                  className="absolute top-0.5 w-4 h-4 rounded-full transition-transform duration-200"
-                  style={{
-                    background: videoMode ? 'var(--theme-bg)' : 'var(--theme-text-muted)',
-                    transform: videoMode ? 'translateX(22px)' : 'translateX(2px)',
-                  }}
-                />
-              </span>
-            </button>
           </div>
 
           {/* Interests input */}
