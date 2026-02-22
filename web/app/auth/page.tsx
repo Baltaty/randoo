@@ -49,6 +49,18 @@ function AuthForm() {
     <div className="min-h-screen flex flex-col items-center justify-center px-4"
       style={{ background: 'var(--theme-bg)' }}>
 
+      {/* Back button */}
+      <button
+        onClick={() => router.back()}
+        className="absolute top-5 left-5 flex items-center justify-center w-10 h-10 rounded-full transition-colors"
+        style={{ background: 'var(--theme-surface)', border: '1px solid var(--theme-border)', color: 'var(--theme-text)' }}
+        aria-label="Go back"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M19 12H5M12 5l-7 7 7 7"/>
+        </svg>
+      </button>
+
       {/* Logo */}
       <div className="flex items-center gap-2.5 mb-10">
         <svg width="28" height="34" viewBox="0 0 44 52" fill="none">
@@ -119,6 +131,13 @@ function AuthForm() {
             {loading ? '…' : mode === 'signin' ? 'Sign in' : 'Create account'}
           </button>
         </form>
+
+        <p className="text-center text-xs mt-6 leading-relaxed px-2" style={{ color: 'var(--theme-text-muted)' }}>
+          By tapping Sign In, you agree to our{' '}
+          <a href="/terms" className="underline underline-offset-2" style={{ color: 'var(--theme-text)' }}>Terms of Service</a>.
+          {' '}Learn how we process your data in our{' '}
+          <a href="/privacy" className="underline underline-offset-2" style={{ color: 'var(--theme-text)' }}>Privacy Policy</a>.
+        </p>
       </div>
     </div>
   )
