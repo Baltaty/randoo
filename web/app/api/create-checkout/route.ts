@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import { createClient } from '@/lib/supabase'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
@@ -11,8 +12,13 @@ const PLANS: Record<string, { label: string; amount: number; minutes: number }> 
 }
 
 export async function POST(req: NextRequest) {
-  // Must be authenticated
-  const supabase = createClient()
+  // Must be authenticated — use SSR client to read session from cookies
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { cookies: { getAll: () => cookieStore.getAll() } },
+  )
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
