@@ -705,8 +705,11 @@ export default function SettingsPage() {
 
   useEffect(() => {
     const saved = localStorage.getItem('randoo-settings')
-    if (saved) setSettings({ ...DEFAULTS, ...JSON.parse(saved) })
-  }, [])
+    const fromStorage: Partial<Settings> = saved ? JSON.parse(saved) : {}
+    // Supabase user_metadata.gender is the source of truth for yourSex
+    const metaGender = user?.user_metadata?.gender as Sex | undefined
+    setSettings({ ...DEFAULTS, ...fromStorage, ...(metaGender ? { yourSex: metaGender } : {}) })
+  }, [user])
 
   function set(key: keyof Settings, value: unknown) {
     const next = { ...settings, [key]: value }
