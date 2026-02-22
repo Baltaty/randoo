@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { I18nProvider } from '@/contexts/I18nContext'
+import { AuthProvider } from '@/contexts/AuthContext'
 
 export const metadata: Metadata = {
   title: 'Randoo — Chat vidéo aléatoire',
@@ -22,7 +23,9 @@ export default function RootLayout({
       <body>
         <ThemeProvider>
           <I18nProvider>
-            {children}
+            <AuthProvider>
+              {children}
+            </AuthProvider>
           </I18nProvider>
         </ThemeProvider>
       </body>

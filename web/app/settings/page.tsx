@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
 import { useI18n } from '@/contexts/I18nContext'
+import { useAuth } from '@/contexts/AuthContext'
 
 type Tab = 'general' | 'matching' | 'filters' | 'profile'
 type Sex = 'M' | 'F' | 'O'
@@ -696,6 +697,7 @@ const TAB_IDS: Tab[] = ['general', 'matching', 'filters', 'profile']
 export default function SettingsPage() {
   const router = useRouter()
   const { t } = useI18n()
+  const { signOut } = useAuth()
   const [tab, setTab] = useState<Tab>('general')
   const [settings, setSettings] = useState<Settings>(DEFAULTS)
 
@@ -710,10 +712,12 @@ export default function SettingsPage() {
     localStorage.setItem('randoo-settings', JSON.stringify(next))
   }
 
-  function handleSignOut() {
+  async function handleSignOut() {
     localStorage.removeItem('randoo-settings')
     localStorage.removeItem('randoo-theme')
+    await signOut()
     router.push('/')
+    router.refresh()
   }
 
   return (

@@ -4,14 +4,17 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
 import { useI18n } from '@/contexts/I18nContext'
+import { useAuth } from '@/contexts/AuthContext'
 
 export default function Home() {
   const router = useRouter()
   const { t } = useI18n()
+  const { user } = useAuth()
   const [interests, setInterests] = useState('')
   const onlineCount = 10229
 
   function handleStart() {
+    if (!user) { router.push('/auth?next=/chat'); return }
     const params = new URLSearchParams()
     if (interests.trim()) params.set('interests', interests.trim())
     router.push(`/chat?${params.toString()}`)
