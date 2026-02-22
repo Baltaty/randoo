@@ -30,6 +30,12 @@ function SuccessContent() {
         const data = await res.json()
 
         if (data.ready) {
+          // Persist boost in localStorage so it survives navigation
+          localStorage.setItem('randoo-boost', JSON.stringify({
+            token:      data.token,
+            wantGender: data.wantGender,
+            expiresAt:  data.expiresAt,
+          }))
           const expires = encodeURIComponent(data.expiresAt)
           router.replace(`/chat?boost=${data.token}&wantGender=${data.wantGender}&boostExpires=${expires}`)
           return

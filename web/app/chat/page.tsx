@@ -94,10 +94,17 @@ function ChatContent() {
   const { t } = useI18n()
   const { user } = useAuth()
 
-  // URL params from boost page
-  const urlWantGender  = searchParams.get('wantGender')   || undefined
-  const urlBoostToken  = searchParams.get('boost')        || undefined
+  // URL params (present only when coming directly from boost/success)
+  const urlBoostToken   = searchParams.get('boost')        || undefined
+  const urlWantGender   = searchParams.get('wantGender')   || undefined
   const urlBoostExpires = searchParams.get('boostExpires') || undefined
+
+  // Active boost — resolved from URL params (priority) or localStorage (persists across navigation)
+  type ActiveBoost = { token: string; wantGender: string; expiresAt: string }
+  const [resolvedBoost, setResolvedBoost] = useState<ActiveBoost | null>(null)
+  // Ref so joinQueue always reads the latest boost without being a dep
+  const boostRef = useRef<ActiveBoost | null>(null)
+  boostRef.current = resolvedBoost
 
   const localVideoRef  = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
@@ -124,6 +131,28 @@ function ChatContent() {
     settingsRef.current = loadChatSettings()
   }, [])
 
+  // Resolve active boost: URL params first, then localStorage
+  useEffect(() => {
+    if (urlBoostToken && urlWantGender && urlBoostExpires) {
+      // Came directly from boost/success — URL params are authoritative
+      setResolvedBoost({ token: urlBoostToken, wantGender: urlWantGender, expiresAt: urlBoostExpires })
+      return
+    }
+    // No URL params — check localStorage (user navigated away and came back)
+    try {
+      const saved = localStorage.getItem('randoo-boost')
+      if (!saved) return
+      const b = JSON.parse(saved) as ActiveBoost
+      if (new Date(b.expiresAt) > new Date()) {
+        setResolvedBoost(b)
+      } else {
+        localStorage.removeItem('randoo-boost')
+      }
+    } catch {
+      localStorage.removeItem('randoo-boost')
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // When user metadata loads (async), update gender in settings and re-join if still waiting
   useEffect(() => {
     const metaGender = user?.user_metadata?.gender
@@ -136,20 +165,24 @@ function ChatContent() {
     }
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Boost countdown
+  // Boost countdown — driven by resolvedBoost (survives navigation)
   useEffect(() => {
-    if (!urlBoostExpires) return
-    const expiresAt = new Date(urlBoostExpires).getTime()
+    if (!resolvedBoost) return
+    const expiresAt = new Date(resolvedBoost.expiresAt).getTime()
 
     const tick = () => {
       const secs = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000))
       setBoostSecsLeft(secs)
-      if (secs === 0) clearInterval(id)
+      if (secs === 0) {
+        clearInterval(id)
+        localStorage.removeItem('randoo-boost')
+        setResolvedBoost(null)
+      }
     }
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [urlBoostExpires])
+  }, [resolvedBoost?.expiresAt]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function clearConnectionTimer() {
     if (connectionTimerRef.current) {
@@ -177,8 +210,8 @@ function ChatContent() {
       privacyMode: s.privacyMode,
       gender:      s.privacyMode ? undefined : myGender,
       // Boost token (from Stripe payment) unlocks wantGender filter server-side
-      boostToken:  urlBoostToken,
-      wantGender:  urlWantGender ?? (s.lookingFor === 'all' ? undefined : s.lookingFor),
+      boostToken:  boostRef.current?.token,
+      wantGender:  boostRef.current?.wantGender ?? (s.lookingFor === 'all' ? undefined : s.lookingFor),
       countries:   s.countries,
       maxWait:     s.maxWait,
     })
