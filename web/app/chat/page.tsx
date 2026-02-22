@@ -13,7 +13,7 @@ type Status = 'connecting' | 'waiting' | 'matched' | 'disconnected'
 // ISO 3166-1 alpha-2 → flag emoji + display name
 function countryInfo(code: string): { flag: string; name: string } {
   const flag = code.toUpperCase().split('').map(c =>
-    String.fromCodePoint(0x1F1E0 + c.charCodeAt(0) - 65)
+    String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)
   ).join('')
   const name = new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? code
   return { flag, name }
