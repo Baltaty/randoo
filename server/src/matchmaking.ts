@@ -62,9 +62,19 @@ function genderOk(user: UserInfo, candidate: UserInfo): boolean {
   return userWants && candidateWants
 }
 
-function countriesOk(a: string[], b: string[]): boolean {
-  if (a.length === 0 || b.length === 0) return true        // at least one has no filter
-  return a.some(c => b.includes(c))                        // share at least one country
+// Does `filter` (list of wanted countries) accept `actualCountry`?
+// Empty filter = no preference = accepts anyone.
+// Unknown actual country = benefit of the doubt = accepted.
+function filterAccepts(filter: string[], actualCountry: string | undefined): boolean {
+  if (filter.length === 0) return true          // no preference
+  if (!actualCountry)      return true          // can't determine country → don't block
+  return filter.includes(actualCountry)
+}
+
+function countriesOk(user: UserInfo, candidate: UserInfo): boolean {
+  // Both sides must accept each other
+  return filterAccepts(user.countries, candidate.country) &&
+         filterAccepts(candidate.countries, user.country)
 }
 
 function findMatch(user: UserInfo, io: Server, ignoreCountry = false): UserInfo | null {
@@ -78,7 +88,7 @@ function findMatch(user: UserInfo, io: Server, ignoreCountry = false): UserInfo 
     // Never match two sockets from the same browser tab/page-load
     if (candidate.sessionId === user.sessionId) continue
     if (!genderOk(user, candidate)) continue
-    if (!ignoreCountry && !countriesOk(user.countries, candidate.countries)) continue
+    if (!ignoreCountry && !countriesOk(user, candidate)) continue
     return candidate
   }
   return null
