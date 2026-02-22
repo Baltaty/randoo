@@ -107,6 +107,9 @@ function ChatContent() {
   const connectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Unique per page-load — server uses this to prevent self-match on socket reconnect
   const sessionIdRef       = useRef<string>(crypto.randomUUID())
+  // Always up-to-date user ref — avoids race condition between auth loading and socket connect
+  const userRef            = useRef(user)
+  userRef.current          = user
 
   const [status, setStatus]               = useState<Status>('connecting')
   const [isMuted, setIsMuted]             = useState(false)
@@ -116,13 +119,22 @@ function ChatContent() {
   const [boostSecsLeft, setBoostSecsLeft] = useState<number | null>(null)
   const onlineCount = 10229
 
-  // Load settings once before socket connects
+  // Load settings once on mount
   useEffect(() => {
     settingsRef.current = loadChatSettings()
-    // Override gender from Supabase user metadata if available
+  }, [])
+
+  // When user metadata loads (async), update gender in settings and re-join if still waiting
+  useEffect(() => {
     const metaGender = user?.user_metadata?.gender
-    if (metaGender) settingsRef.current.yourSex = metaGender
-  }, [user])
+    if (!metaGender) return
+    settingsRef.current.yourSex = metaGender
+    // If socket already connected but user wasn't loaded yet, re-join with correct gender
+    const socket = getSocket()
+    if (socket.connected && (status === 'waiting' || status === 'connecting')) {
+      joinQueue()
+    }
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Boost countdown
   useEffect(() => {
@@ -157,11 +169,13 @@ function ChatContent() {
     setStatus('waiting')
     roomIdRef.current = null
 
+    // Supabase user_metadata.gender is source of truth — always current via userRef
+    const myGender = userRef.current?.user_metadata?.gender || s.yourSex || undefined
+
     socket.emit('join', {
       sessionId:   sessionIdRef.current,
       privacyMode: s.privacyMode,
-      // Privacy mode: hide your gender from server
-      gender:      s.privacyMode ? undefined : (s.yourSex || undefined),
+      gender:      s.privacyMode ? undefined : myGender,
       // Boost token (from Stripe payment) unlocks wantGender filter server-side
       boostToken:  urlBoostToken,
       wantGender:  urlWantGender ?? (s.lookingFor === 'all' ? undefined : s.lookingFor),
