@@ -8,8 +8,9 @@ import { setupMatchmaking } from './matchmaking'
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
   : [
+      'https://randoo.fun',
+      'https://www.randoo.fun',
       'https://randoo-psi.vercel.app',
-      'https://randoo.app',
       'http://localhost:3000',
     ]
 
