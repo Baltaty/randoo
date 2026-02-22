@@ -47,7 +47,7 @@ export default function PrivacyPage() {
           },
           {
             title: '6. Your Rights (GDPR)',
-            body: 'If you are in the EU/EEA, you have the right to access, correct, or delete your personal data, to object to or restrict processing, and to data portability. To exercise these rights, contact us at privacy@randoo.app or use the Delete Account feature in Settings.',
+            body: 'If you are in the EU/EEA, you have the right to access, correct, or delete your personal data, to object to or restrict processing, and to data portability. To exercise these rights, contact us at privacy@randoo.fun or use the Delete Account feature in Settings.',
           },
           {
             title: '7. Cookies & Local Storage',
@@ -63,7 +63,7 @@ export default function PrivacyPage() {
           },
           {
             title: '10. Contact',
-            body: 'For privacy-related questions or requests, contact us at privacy@randoo.app.',
+            body: 'For privacy-related questions or requests, contact us at privacy@randoo.fun.',
           },
         ].map(({ title, body }) => (
           <div key={title} className="mb-8">

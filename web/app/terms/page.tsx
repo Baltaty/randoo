@@ -63,7 +63,7 @@ export default function TermsPage() {
           },
           {
             title: '10. Contact',
-            body: 'For questions about these Terms, please contact us at legal@randoo.app.',
+            body: 'For questions about these Terms, please contact us at legal@randoo.fun.',
           },
         ].map(({ title, body }) => (
           <div key={title} className="mb-8">
