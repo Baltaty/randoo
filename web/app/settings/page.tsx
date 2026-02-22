@@ -565,10 +565,12 @@ function ProfileTab({
   s,
   set,
   onSignOut,
+  email,
 }: {
   s: Settings
   set: (k: keyof Settings, v: unknown) => void
   onSignOut: () => void
+  email?: string
 }) {
   const { t } = useI18n()
   const [deleteStep, setDeleteStep] = useState<'idle' | 'confirm' | 'done'>('idle')
@@ -606,7 +608,7 @@ function ProfileTab({
         <Card>
           <div className="px-5 py-4">
             <p className="text-xs font-semibold mb-1" style={{ color: 'var(--theme-text-muted)' }}>{t('settings.account.username')}</p>
-            <p className="text-sm" style={{ color: 'var(--theme-text-muted)' }}>anonymous@randoo.app</p>
+            <p className="text-sm" style={{ color: 'var(--theme-text-muted)' }}>{email ?? '—'}</p>
           </div>
 
           <div style={{ height: 1, background: 'var(--theme-border)' }} />
@@ -697,7 +699,7 @@ const TAB_IDS: Tab[] = ['general', 'matching', 'filters', 'profile']
 export default function SettingsPage() {
   const router = useRouter()
   const { t } = useI18n()
-  const { signOut } = useAuth()
+  const { user, signOut } = useAuth()
   const [tab, setTab] = useState<Tab>('general')
   const [settings, setSettings] = useState<Settings>(DEFAULTS)
 
@@ -754,7 +756,7 @@ export default function SettingsPage() {
             {tab === 'general'  && <GeneralTab  s={settings} set={set} />}
             {tab === 'matching' && <MatchingTab s={settings} set={set} />}
             {tab === 'filters'  && <FiltersTab  s={settings} set={set} />}
-            {tab === 'profile'  && <ProfileTab  s={settings} set={set} onSignOut={handleSignOut} />}
+            {tab === 'profile'  && <ProfileTab  s={settings} set={set} onSignOut={handleSignOut} email={user?.email} />}
           </div>
         </div>
       </div>
