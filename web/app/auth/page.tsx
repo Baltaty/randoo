@@ -4,7 +4,8 @@ import { useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 
-type Mode = 'signin' | 'signup'
+type Mode   = 'signin' | 'signup'
+type Gender = 'M' | 'F' | 'O'
 
 function AuthForm() {
   const router       = useRouter()
@@ -14,20 +15,29 @@ function AuthForm() {
   const [mode, setMode]       = useState<Mode>('signin')
   const [email, setEmail]     = useState('')
   const [password, setPassword] = useState('')
+  const [gender, setGender]   = useState<Gender | null>(null)
   const [error, setError]     = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    setLoading(true)
 
+    if (mode === 'signup' && !gender) {
+      setError('Please select your gender.')
+      return
+    }
+
+    setLoading(true)
     const supabase = createClient()
 
     if (mode === 'signup') {
-      const { error } = await supabase.auth.signUp({ email, password })
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { gender } },
+      })
       if (error) { setError(error.message); setLoading(false); return }
-      // Email confirmation is disabled — user is immediately active, redirect now
       router.push(next)
       router.refresh()
     } else {
@@ -44,6 +54,12 @@ function AuthForm() {
     setMode(m)
     setError(null)
   }
+
+  const GENDERS: { value: Gender; label: string }[] = [
+    { value: 'M', label: 'Man'   },
+    { value: 'F', label: 'Woman' },
+    { value: 'O', label: 'Other' },
+  ]
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4"
@@ -120,6 +136,33 @@ function AuthForm() {
               color: 'var(--theme-text)',
             }}
           />
+
+          {/* Gender selector — signup only */}
+          {mode === 'signup' && (
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-widest mb-2 px-1"
+                style={{ color: 'var(--theme-text-muted)' }}>
+                I am
+              </p>
+              <div className="flex gap-2">
+                {GENDERS.map(g => (
+                  <button
+                    key={g.value}
+                    type="button"
+                    onClick={() => setGender(g.value)}
+                    className="flex-1 py-3 rounded-2xl text-sm font-semibold transition-all border"
+                    style={{
+                      background:  gender === g.value ? 'var(--theme-accent)' : 'transparent',
+                      color:       gender === g.value ? 'var(--theme-btn-fg)' : 'var(--theme-text-muted)',
+                      borderColor: gender === g.value ? 'var(--theme-accent)' : 'var(--theme-border)',
+                    }}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {error && (
             <p className="text-sm px-2" style={{ color: 'var(--color-error)' }}>{error}</p>

@@ -30,8 +30,8 @@ function SuccessContent() {
         const data = await res.json()
 
         if (data.ready) {
-          // Redirect to chat with boost token
-          router.replace(`/chat?boost=${data.token}&wantGender=${data.wantGender}`)
+          const expires = encodeURIComponent(data.expiresAt)
+          router.replace(`/chat?boost=${data.token}&wantGender=${data.wantGender}&boostExpires=${expires}`)
           return
         }
       } catch { /* retry */ }

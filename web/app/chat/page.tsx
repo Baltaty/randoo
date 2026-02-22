@@ -6,6 +6,7 @@ import { getSocket, disconnectSocket } from '@/lib/socket'
 import { WebRTCManager } from '@/lib/webrtc'
 import { playMatchSound, playDisconnectSound } from '@/lib/sfx'
 import { useI18n } from '@/contexts/I18nContext'
+import { useAuth } from '@/contexts/AuthContext'
 
 type Status = 'connecting' | 'waiting' | 'matched' | 'disconnected'
 
@@ -91,10 +92,12 @@ function ChatContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { t } = useI18n()
+  const { user } = useAuth()
 
-  // URL params from boost page override settings
-  const urlWantGender  = searchParams.get('wantGender') || undefined
-  const urlBoostToken  = searchParams.get('boost')      || undefined
+  // URL params from boost page
+  const urlWantGender  = searchParams.get('wantGender')   || undefined
+  const urlBoostToken  = searchParams.get('boost')        || undefined
+  const urlBoostExpires = searchParams.get('boostExpires') || undefined
 
   const localVideoRef  = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
@@ -110,12 +113,31 @@ function ChatContent() {
   const [isCameraOff, setIsCameraOff]     = useState(false)
   const [matchToast, setMatchToast]       = useState<string | null>(null)
   const matchToastTimerRef                = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [boostSecsLeft, setBoostSecsLeft] = useState<number | null>(null)
   const onlineCount = 10229
 
   // Load settings once before socket connects
   useEffect(() => {
     settingsRef.current = loadChatSettings()
-  }, [])
+    // Override gender from Supabase user metadata if available
+    const metaGender = user?.user_metadata?.gender
+    if (metaGender) settingsRef.current.yourSex = metaGender
+  }, [user])
+
+  // Boost countdown
+  useEffect(() => {
+    if (!urlBoostExpires) return
+    const expiresAt = new Date(urlBoostExpires).getTime()
+
+    const tick = () => {
+      const secs = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000))
+      setBoostSecsLeft(secs)
+      if (secs === 0) clearInterval(id)
+    }
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [urlBoostExpires])
 
   function clearConnectionTimer() {
     if (connectionTimerRef.current) {
@@ -285,6 +307,12 @@ function ChatContent() {
   const toggleMute   = () => setIsMuted(webrtcRef.current.toggleMute())
   const toggleCamera = () => setIsCameraOff(webrtcRef.current.toggleCamera())
 
+  function formatBoostTime(secs: number) {
+    const m = Math.floor(secs / 60).toString().padStart(2, '0')
+    const s = (secs % 60).toString().padStart(2, '0')
+    return `${m}:${s}`
+  }
+
   return (
     <div className="h-screen w-screen bg-black flex flex-col overflow-hidden">
 
@@ -312,17 +340,19 @@ function ChatContent() {
             {t('chat.online', { n: onlineCount.toLocaleString('en-US') })}
           </div>
 
-          {/* Boost */}
-          <button
-            onClick={() => router.push('/boost')}
-            className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all hover:brightness-90 active:scale-95"
-            style={{ background: 'var(--theme-accent)', color: 'var(--theme-btn-fg)' }}
-          >
-            <svg width="14" height="14" viewBox="0 0 44 52" fill="currentColor">
-              <path d="M26 0L0 30H18L18 52L44 22H26L26 0Z"/>
-            </svg>
-            {t('chat.boost')}
-          </button>
+          {/* Boost button — hidden when boost is active (banner shown instead) */}
+          {!(boostSecsLeft !== null && boostSecsLeft > 0) && (
+            <button
+              onClick={() => router.push('/boost')}
+              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold transition-all hover:brightness-90 active:scale-95"
+              style={{ background: 'var(--theme-accent)', color: 'var(--theme-btn-fg)' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 44 52" fill="currentColor">
+                <path d="M26 0L0 30H18L18 52L44 22H26L26 0Z"/>
+              </svg>
+              {t('chat.boost')}
+            </button>
+          )}
 
           {/* Settings */}
           <button
@@ -336,6 +366,17 @@ function ChatContent() {
           </button>
         </div>
       </header>
+
+      {/* ── Boost countdown banner ── */}
+      {boostSecsLeft !== null && boostSecsLeft > 0 && (
+        <div className="flex-shrink-0 flex items-center justify-center gap-2 py-1.5 text-xs font-semibold"
+          style={{ background: 'var(--theme-accent)', color: 'var(--theme-btn-fg)' }}>
+          <svg width="11" height="11" viewBox="0 0 44 52" fill="currentColor">
+            <path d="M26 0L0 30H18L18 52L44 22H26L26 0Z"/>
+          </svg>
+          Boost active — {formatBoostTime(boostSecsLeft)} remaining
+        </div>
+      )}
 
       {/* ── Video area ── */}
       <div className="flex-1 relative overflow-hidden bg-black">
