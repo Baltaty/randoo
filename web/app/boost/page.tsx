@@ -6,9 +6,9 @@ import BottomNav from '@/components/BottomNav'
 import { useI18n } from '@/contexts/I18nContext'
 
 const PLANS = [
-  { id: '10min', duration: '10 min', price: '1,99 €', popular: false },
-  { id: '30min', duration: '30 min', price: '3,99 €', popular: true  },
-  { id: '60min', duration: '1h',     price: '5,99 €', popular: false },
+  { id: '10min', duration: '10 min', price: '$2.99', popular: false },
+  { id: '30min', duration: '30 min', price: '$7.99', popular: true  },
+  { id: '60min', duration: '1h',     price: '$14.99', popular: false },
 ]
 
 type WantGender = 'M' | 'F'

@@ -6,9 +6,9 @@ import { cookies } from 'next/headers'
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
 
 const PLANS: Record<string, { label: string; amount: number; minutes: number }> = {
-  '10min': { label: 'Randoo Boost — 10 min', amount: 199, minutes: 10  },
-  '30min': { label: 'Randoo Boost — 30 min', amount: 399, minutes: 30  },
-  '60min': { label: 'Randoo Boost — 1h',     amount: 599, minutes: 60  },
+  '10min': { label: 'Randoo Boost — 10 min', amount: 299, minutes: 10  },
+  '30min': { label: 'Randoo Boost — 30 min', amount: 799, minutes: 30  },
+  '60min': { label: 'Randoo Boost — 1h',     amount: 1499, minutes: 60  },
 }
 
 export async function POST(req: NextRequest) {
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     mode: 'payment',
     line_items: [{
       price_data: {
-        currency: 'eur',
+        currency: 'usd',
         unit_amount: amount,
         product_data: { name: label },
       },
