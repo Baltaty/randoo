@@ -113,7 +113,7 @@ const fr: Dict = {
   'common.off': 'OFF',
 
   // ── Landing ──────────────────────────────────
-  'home.tagline':    'Rencontres beauté™',
+  'home.tagline':    'Meet Beautiful People™',
   'home.interests':  'Ajoute tes centres d\'intérêt (optionnel)',
   'home.start':      'Démarrer',
   'home.video_mode': 'Mode Vidéo',
