@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
 import { useI18n } from '@/contexts/I18nContext'
@@ -10,8 +10,10 @@ export default function Home() {
   const router = useRouter()
   const { t } = useI18n()
   const { user } = useAuth()
-  const [interests, setInterests] = useState('')
+  const [tags, setTags]         = useState<string[]>([])
+  const [tagInput, setTagInput] = useState('')
   const [onlineCount, setOnlineCount] = useState<number | null>(null)
+  const tagInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const fetchCount = () =>
@@ -25,10 +27,27 @@ export default function Home() {
     return () => clearInterval(id)
   }, [])
 
+  function addTag(value: string) {
+    const v = value.trim()
+    if (!v || tags.length >= 5 || tags.some(t => t.toLowerCase() === v.toLowerCase())) return
+    setTags(prev => [...prev, v])
+    setTagInput('')
+  }
+
+  function handleTagKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (tagInput.trim()) { addTag(tagInput); return }
+      handleStart()
+    } else if (e.key === 'Backspace' && !tagInput && tags.length > 0) {
+      setTags(prev => prev.slice(0, -1))
+    }
+  }
+
   function handleStart() {
     if (!user) { router.push('/auth?next=/chat'); return }
     const params = new URLSearchParams()
-    if (interests.trim()) params.set('interests', interests.trim())
+    if (tags.length > 0) params.set('interests', tags.join(','))
     router.push(`/chat?${params.toString()}`)
   }
 
@@ -81,20 +100,39 @@ export default function Home() {
             </div>
           </div>
 
-          {/* Interests input */}
-          <input
-            type="text"
-            value={interests}
-            onChange={e => setInterests(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleStart()}
-            placeholder={t('home.interests')}
-            className="w-full px-7 py-5 rounded-full text-base outline-none transition-all backdrop-blur-sm"
-            style={{
-              border: '1px solid var(--theme-border)',
-              background: 'var(--theme-surface)',
-              color: 'var(--theme-text)',
-            }}
-          />
+          {/* Interests tag input */}
+          <div
+            className="w-full px-5 py-3 rounded-2xl flex flex-wrap items-center gap-2 backdrop-blur-sm cursor-text transition-all"
+            style={{ border: '1px solid var(--theme-border)', background: 'var(--theme-surface)', minHeight: '60px' }}
+            onClick={() => tagInputRef.current?.focus()}
+          >
+            {tags.map(tag => (
+              <span
+                key={tag}
+                className="flex items-center gap-1 px-3 py-1 rounded-full text-sm font-semibold"
+                style={{ background: 'var(--theme-accent)', color: 'var(--theme-btn-fg)' }}
+              >
+                {tag}
+                <button
+                  onClick={e => { e.stopPropagation(); setTags(prev => prev.filter(t => t !== tag)) }}
+                  className="ml-0.5 hover:opacity-70 leading-none"
+                  style={{ fontSize: 16 }}
+                >×</button>
+              </span>
+            ))}
+            {tags.length < 5 && (
+              <input
+                ref={tagInputRef}
+                type="text"
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={handleTagKeyDown}
+                placeholder={tags.length === 0 ? t('home.interests') : ''}
+                className="flex-1 min-w-[120px] bg-transparent outline-none text-base"
+                style={{ color: 'var(--theme-text)' }}
+              />
+            )}
+          </div>
 
           {/* Start button */}
           <button

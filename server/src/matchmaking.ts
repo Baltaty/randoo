@@ -11,6 +11,7 @@ interface UserInfo {
   wantGender?: Gender     // only set if boost token is valid
   boostActive: boolean
   countries:   string[]  // empty = no filter (match anyone)
+  interests:   string[]  // declared interests for soft-priority matching
   maxWait:     number    // seconds before country filter is relaxed
   joinedAt:    number
 }
@@ -77,7 +78,16 @@ function countriesOk(user: UserInfo, candidate: UserInfo): boolean {
          filterAccepts(candidate.countries, user.country)
 }
 
+// Returns the number of interests in common (case-insensitive)
+function interestScore(a: UserInfo, b: UserInfo): number {
+  if (!a.interests.length || !b.interests.length) return 0
+  const bLower = b.interests.map(i => i.toLowerCase())
+  return a.interests.filter(i => bLower.includes(i.toLowerCase())).length
+}
+
 function findMatch(user: UserInfo, io: Server, ignoreCountry = false): UserInfo | null {
+  const candidates: Array<{ info: UserInfo; score: number }> = []
+
   for (const candidate of queue) {
     // Skip sockets that are no longer connected (stale due to reconnect race condition)
     if (!io.sockets.sockets.has(candidate.socketId)) {
@@ -89,9 +99,13 @@ function findMatch(user: UserInfo, io: Server, ignoreCountry = false): UserInfo 
     if (candidate.sessionId === user.sessionId) continue
     if (!genderOk(user, candidate)) continue
     if (!ignoreCountry && !countriesOk(user, candidate)) continue
-    return candidate
+    candidates.push({ info: candidate, score: interestScore(user, candidate) })
   }
-  return null
+
+  if (!candidates.length) return null
+  // Prioritise candidates with most common interests; ties keep queue order
+  candidates.sort((a, b) => b.score - a.score)
+  return candidates[0].info
 }
 
 // ── Queue helpers ────────────────────────────
@@ -117,9 +131,12 @@ function createRoom(a: UserInfo, b: UserInfo, io: Server) {
   const roomId = `r_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   rooms.set(roomId, [a.socketId, b.socketId])
 
+  const bLower = b.interests.map(i => i.toLowerCase())
+  const commonInterests = a.interests.filter(i => bLower.includes(i.toLowerCase()))
+
   // Only reveal a peer's country if they have a country resolved (privacy mode = no country sent)
-  io.to(a.socketId).emit('matched', { roomId, initiator: true,  peerGender: b.gender, peerCountry: b.country })
-  io.to(b.socketId).emit('matched', { roomId, initiator: false, peerGender: a.gender, peerCountry: a.country })
+  io.to(a.socketId).emit('matched', { roomId, initiator: true,  peerGender: b.gender, peerCountry: b.country, commonInterests })
+  io.to(b.socketId).emit('matched', { roomId, initiator: false, peerGender: a.gender, peerCountry: a.country, commonInterests })
   console.log(`[match] ${a.socketId} <-> ${b.socketId} → ${roomId}`)
 }
 
@@ -156,6 +173,7 @@ export function setupMatchmaking(io: Server) {
       wantGender?: string
       boostToken?: string
       countries?:  string[]
+      interests?:  string[]
       maxWait?:    number
       privacyMode?: boolean
     }) => {
@@ -181,6 +199,7 @@ export function setupMatchmaking(io: Server) {
         wantGender,
         boostActive,
         countries:   Array.isArray(data.countries) ? data.countries : [],
+        interests:   Array.isArray(data.interests)  ? data.interests.slice(0, 5) : [],
         maxWait:     typeof data.maxWait === 'number' ? Math.max(1, data.maxWait) : 5,
         joinedAt:    Date.now(),
       }

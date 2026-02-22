@@ -98,6 +98,8 @@ function ChatContent() {
   const urlBoostToken   = searchParams.get('boost')        || undefined
   const urlWantGender   = searchParams.get('wantGender')   || undefined
   const urlBoostExpires = searchParams.get('boostExpires') || undefined
+  const urlInterests    = searchParams.get('interests')?.split(',').filter(Boolean) ?? []
+  const interestsRef    = useRef<string[]>(urlInterests)
 
   // Active boost — resolved from URL params (priority) or localStorage (persists across navigation)
   type ActiveBoost = { token: string; wantGender: string; expiresAt: string }
@@ -214,6 +216,7 @@ function ChatContent() {
       wantGender:  boostRef.current?.wantGender ?? (s.lookingFor === 'all' ? undefined : s.lookingFor),
       countries:   s.countries,
       maxWait:     s.maxWait,
+      interests:   interestsRef.current,
     })
   }, [urlWantGender, urlBoostToken])
 
@@ -244,20 +247,23 @@ function ChatContent() {
       socket.on('waiting', () => setStatus('waiting'))
       socket.on('online-count', (n: number) => setOnlineCount(n))
 
-      socket.on('matched', async ({ roomId, initiator, peerCountry }: { roomId: string; initiator: boolean; peerCountry?: string }) => {
+      socket.on('matched', async ({ roomId, initiator, peerCountry, commonInterests }: { roomId: string; initiator: boolean; peerCountry?: string; commonInterests?: string[] }) => {
         roomIdRef.current = roomId
         setStatus('matched')
         if (settingsRef.current.sfxVolume) playMatchSound()
 
-        // Show country toast for 4 seconds
+        // Build toast: common interests (if any), then country
         if (matchToastTimerRef.current) clearTimeout(matchToastTimerRef.current)
+        const parts: string[] = []
         if (peerCountry) {
           const { flag, name } = countryInfo(peerCountry)
-          setMatchToast(`You're now connected with a random stranger from ${name} ${flag}`)
-        } else {
-          setMatchToast(`You're now connected with a random stranger`)
+          parts.push(`${name} ${flag}`)
         }
-        matchToastTimerRef.current = setTimeout(() => setMatchToast(null), 4000)
+        if (commonInterests && commonInterests.length > 0) {
+          parts.push(`Both into: ${commonInterests.join(', ')}`)
+        }
+        setMatchToast(parts.length > 0 ? parts.join(' · ') : `You're now connected with a random stranger`)
+        matchToastTimerRef.current = setTimeout(() => setMatchToast(null), 5000)
 
         // Safety net: if no remote stream arrives within 8s, the match failed
         // (self-match race condition, ICE stuck in 'new', peer immediately gone, etc.)
