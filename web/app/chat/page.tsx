@@ -254,15 +254,15 @@ function ChatContent() {
 
         // Build toast: common interests (if any), then country
         if (matchToastTimerRef.current) clearTimeout(matchToastTimerRef.current)
-        const parts: string[] = []
+        let toast = `You're now connected with a random stranger`
         if (peerCountry) {
           const { flag, name } = countryInfo(peerCountry)
-          parts.push(`${name} ${flag}`)
+          toast = `You're now connected with someone from ${name} ${flag}`
         }
         if (commonInterests && commonInterests.length > 0) {
-          parts.push(`Both into: ${commonInterests.join(', ')}`)
+          toast += ` · Both into: ${commonInterests.join(', ')}`
         }
-        setMatchToast(parts.length > 0 ? parts.join(' · ') : `You're now connected with a random stranger`)
+        setMatchToast(toast)
         matchToastTimerRef.current = setTimeout(() => setMatchToast(null), 5000)
 
         // Safety net: if no remote stream arrives within 8s, the match failed
