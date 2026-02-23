@@ -5,7 +5,7 @@ import { I18nProvider } from '@/contexts/I18nContext'
 import { AuthProvider } from '@/contexts/AuthContext'
 
 export const metadata: Metadata = {
-  title: 'Randoo — Chat vidéo aléatoire',
+  title: 'Randoo - Talk to Strangers & Random Video Chat',
   description: 'Meet Beautiful People™ — chat vidéo aléatoire, anonyme, instantané.',
 }
 
