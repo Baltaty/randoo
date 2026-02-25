@@ -5,7 +5,7 @@ export async function GET() {
     const url = process.env.SERVER_URL ?? process.env.NEXT_PUBLIC_SERVER_URL ?? 'http://localhost:3001'
     const res  = await fetch(`${url}/health`, { cache: 'no-store' })
     const data = await res.json()
-    return NextResponse.json({ count: data.onlineCount ?? 0 })
+    return NextResponse.json({ count: (data.onlineCount ?? 0) + 1998 })
   } catch {
     return NextResponse.json({ count: 0 })
   }

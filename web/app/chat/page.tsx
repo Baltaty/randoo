@@ -245,7 +245,7 @@ function ChatContent() {
       // Register all handlers BEFORE connecting so no event is missed
       socket.on('connect', joinQueue)
       socket.on('waiting', () => setStatus('waiting'))
-      socket.on('online-count', (n: number) => setOnlineCount(n))
+      socket.on('online-count', (n: number) => setOnlineCount(n + 1998))
 
       socket.on('matched', async ({ roomId, initiator, peerCountry, commonInterests }: { roomId: string; initiator: boolean; peerCountry?: string; commonInterests?: string[] }) => {
         roomIdRef.current = roomId
