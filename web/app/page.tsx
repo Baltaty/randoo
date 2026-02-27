@@ -17,10 +17,25 @@ export default function Home() {
   const [onlineCount, setOnlineCount] = useState<number | null>(null)
   const tagInputRef = useRef<HTMLInputElement>(null)
 
+  const [myGender, setMyGender]   = useState<string>(() => {
+    try { return JSON.parse(localStorage.getItem('randoo-settings') ?? '{}').yourSex ?? '' } catch { return '' }
+  })
+  const [lookingFor, setLookingFor] = useState<string>(() => {
+    try { return JSON.parse(localStorage.getItem('randoo-settings') ?? '{}').lookingFor ?? 'all' } catch { return 'all' }
+  })
+
   // Persist tags to localStorage whenever they change
   useEffect(() => {
     localStorage.setItem('randoo-interests', JSON.stringify(tags))
   }, [tags])
+
+  // Persist gender prefs to randoo-settings
+  useEffect(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem('randoo-settings') ?? '{}')
+      localStorage.setItem('randoo-settings', JSON.stringify({ ...s, yourSex: myGender, lookingFor }))
+    } catch {}
+  }, [myGender, lookingFor])
 
   useEffect(() => {
     const fetchCount = () =>
@@ -52,7 +67,6 @@ export default function Home() {
   }
 
   function handleStart() {
-    if (!user) { router.push('/auth?next=/chat'); return }
     const params = new URLSearchParams()
     if (tags.length > 0) params.set('interests', tags.join(','))
     router.push(`/chat?${params.toString()}`)
@@ -139,6 +153,47 @@ export default function Home() {
                 style={{ color: 'var(--theme-text)' }}
               />
             )}
+          </div>
+
+          {/* Gender selectors */}
+          <div className="flex gap-3">
+            {/* I am */}
+            <div className="flex-1 flex flex-col gap-2">
+              <span className="text-xs font-semibold px-1" style={{ color: 'var(--theme-text-muted)' }}>I am</span>
+              <div className="flex gap-1.5">
+                {[{ v: 'M', l: 'Man' }, { v: 'F', l: 'Woman' }, { v: 'O', l: 'Other' }].map(({ v, l }) => (
+                  <button
+                    key={v}
+                    onClick={() => setMyGender(g => g === v ? '' : v)}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-95"
+                    style={{
+                      background: myGender === v ? 'var(--theme-accent)' : 'var(--theme-surface)',
+                      color: myGender === v ? 'var(--theme-btn-fg)' : 'var(--theme-text-muted)',
+                      border: '1px solid var(--theme-border)',
+                    }}
+                  >{l}</button>
+                ))}
+              </div>
+            </div>
+
+            {/* Looking for */}
+            <div className="flex-1 flex flex-col gap-2">
+              <span className="text-xs font-semibold px-1" style={{ color: 'var(--theme-text-muted)' }}>Looking for</span>
+              <div className="flex gap-1.5">
+                {[{ v: 'M', l: 'Men' }, { v: 'F', l: 'Women' }, { v: 'all', l: 'Both' }].map(({ v, l }) => (
+                  <button
+                    key={v}
+                    onClick={() => setLookingFor(v)}
+                    className="flex-1 py-2.5 rounded-xl text-sm font-semibold transition-all active:scale-95"
+                    style={{
+                      background: lookingFor === v ? 'var(--theme-accent)' : 'var(--theme-surface)',
+                      color: lookingFor === v ? 'var(--theme-btn-fg)' : 'var(--theme-text-muted)',
+                      border: '1px solid var(--theme-border)',
+                    }}
+                  >{l}</button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Start button */}

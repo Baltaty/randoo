@@ -207,7 +207,8 @@ export function setupMatchmaking(io: Server) {
       removeFromQueue(socket.id)
       clearTimer(socket.id)
 
-      // Verify boost token — only then allow wantGender filter
+      // Boost token → verified wantGender (priority) + boostActive flag
+      // No token → accept wantGender freely from client (soft preference)
       let boostActive = false
       let wantGender: Gender | undefined
       if (data.boostToken) {
@@ -216,6 +217,8 @@ export function setupMatchmaking(io: Server) {
           boostActive = true
           wantGender  = boost.wantGender
         }
+      } else if (data.wantGender && (['M', 'F', 'O'] as string[]).includes(data.wantGender)) {
+        wantGender = data.wantGender as Gender
       }
 
       const ip = resolveIP(socket)
