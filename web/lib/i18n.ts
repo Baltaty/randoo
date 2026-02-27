@@ -14,11 +14,19 @@ const en: Dict = {
   'common.off': 'OFF',
 
   // ── Landing ──────────────────────────────────
-  'home.tagline':    'Meet Beautiful People™',
-  'home.interests':  'Add your interests (optional)',
-  'home.start':      'Start',
-  'home.video_mode': 'Video Mode',
-  'home.online':     '{n}+ online',
+  'home.tagline':      'Meet Beautiful People™',
+  'home.interests':    'Add your interests (optional)',
+  'home.start':        'Start',
+  'home.video_mode':   'Video Mode',
+  'home.online':       '{n}+ online',
+  'home.iam':          'I am',
+  'home.looking_for':  'Looking for',
+  'home.gender.man':   'Man',
+  'home.gender.woman': 'Woman',
+  'home.gender.other': 'Other',
+  'home.gender.men':   'Men',
+  'home.gender.women': 'Women',
+  'home.gender.both':  'Both',
 
   // ── Chat ─────────────────────────────────────
   'chat.connecting':       'Connecting…',
@@ -113,11 +121,19 @@ const fr: Dict = {
   'common.off': 'OFF',
 
   // ── Landing ──────────────────────────────────
-  'home.tagline':    'Meet Beautiful People™',
-  'home.interests':  'Ajoute tes centres d\'intérêt (optionnel)',
-  'home.start':      'Démarrer',
-  'home.video_mode': 'Mode Vidéo',
-  'home.online':     '{n}+ en ligne',
+  'home.tagline':      'Meet Beautiful People™',
+  'home.interests':    'Ajoute tes centres d\'intérêt (optionnel)',
+  'home.start':        'Démarrer',
+  'home.video_mode':   'Mode Vidéo',
+  'home.online':       '{n}+ en ligne',
+  'home.iam':          'Je suis',
+  'home.looking_for':  'Je cherche',
+  'home.gender.man':   'Homme',
+  'home.gender.woman': 'Femme',
+  'home.gender.other': 'Autre',
+  'home.gender.men':   'Des hommes',
+  'home.gender.women': 'Des femmes',
+  'home.gender.both':  'Les deux',
 
   // ── Chat ─────────────────────────────────────
   'chat.connecting':       'Connexion…',
