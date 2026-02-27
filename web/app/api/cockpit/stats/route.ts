@@ -55,12 +55,44 @@ export async function GET(req: NextRequest) {
   const todayBoosts   = allBoosts.filter(b => new Date(b.created_at) >= todayStart)
   const todayRevenue  = todayBoosts.reduce((s, b) => s + (PLAN_PRICES[b.plan] ?? 0), 0)
 
+  // ── Connection log (Supabase — persistent, full history) ─────────────
+  let connectionLog: {
+    ts: number; ip?: string; country?: string
+    gender?: string; interests: string[]; duration?: number
+  }[] = []
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/connection_logs?select=ts,ip,country,gender,interests,duration&order=ts.desc&limit=200`,
+      {
+        headers: {
+          apikey:        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+        },
+        cache: 'no-store',
+      }
+    )
+    if (res.ok) {
+      const rows = await res.json() as Array<{
+        ts: number; ip: string | null; country: string | null
+        gender: string | null; interests: string[]; duration: number | null
+      }>
+      connectionLog = rows.map(r => ({
+        ts:        r.ts,
+        ip:        r.ip        ?? undefined,
+        country:   r.country   ?? undefined,
+        gender:    r.gender    ?? undefined,
+        interests: r.interests ?? [],
+        duration:  r.duration  ?? undefined,
+      }))
+    }
+  } catch { /* fallback to empty */ }
+
   return NextResponse.json({
     live: {
       online: live.clients,
       queue:  live.queue,
       rooms:  live.rooms,
-      log:    live.log ?? [],
+      log:    connectionLog,
     },
     today: {
       signups: todaySignups,

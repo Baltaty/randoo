@@ -46,13 +46,14 @@ const waitTimers = new Map<string, ReturnType<typeof setTimeout>>()
 // ── Connection log ────────────────────────────
 
 interface LogEntry {
-  ts:         number
-  ip?:        string
-  country?:   string
-  gender?:    string
-  interests:  string[]
-  matchedAt?: number   // epoch ms when matched
-  duration?:  number   // seconds of conversation
+  ts:          number
+  ip?:         string
+  country?:    string
+  gender?:     string
+  interests:   string[]
+  matchedAt?:  number   // epoch ms when matched
+  duration?:   number   // seconds of conversation
+  supabaseId?: string   // uuid of the row in connection_logs
 }
 
 const MAX_LOG = 100
@@ -62,6 +63,53 @@ const socketToLog = new Map<string, LogEntry>()
 function addLog(entry: LogEntry) {
   connectionLog.unshift(entry)
   if (connectionLog.length > MAX_LOG) connectionLog.pop()
+}
+
+// ── Supabase persistence ──────────────────────
+
+async function sbInsertLog(entry: LogEntry): Promise<void> {
+  const url = process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return
+  try {
+    const res = await fetch(`${url}/rest/v1/connection_logs`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+      },
+      body: JSON.stringify({
+        ts:        entry.ts,
+        ip:        entry.ip        ?? null,
+        country:   entry.country   ?? null,
+        gender:    entry.gender    ?? null,
+        interests: entry.interests,
+      }),
+    })
+    if (res.ok) {
+      const rows = await res.json() as Array<{ id: string }>
+      if (rows[0]) entry.supabaseId = rows[0].id
+    }
+  } catch { /* ignore — in-memory log is the fallback */ }
+}
+
+async function sbUpdateDuration(entry: LogEntry): Promise<void> {
+  const url = process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key || !entry.supabaseId || entry.duration === undefined) return
+  try {
+    await fetch(`${url}/rest/v1/connection_logs?id=eq.${entry.supabaseId}`, {
+      method: 'PATCH',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ duration: entry.duration }),
+    })
+  } catch { /* ignore */ }
 }
 
 // ── IP → country ─────────────────────────────
@@ -187,6 +235,7 @@ function leaveRoom(socketId: string, io: Server) {
         const log = socketToLog.get(sid)
         if (log?.matchedAt) {
           log.duration = Math.floor((endedAt - log.matchedAt) / 1000)
+          sbUpdateDuration(log).catch(() => {})
         }
       }
 
@@ -252,6 +301,7 @@ export function setupMatchmaking(io: Server) {
       }
       addLog(logEntry)
       socketToLog.set(socket.id, logEntry)
+      sbInsertLog(logEntry).catch(() => {})
 
       const user: UserInfo = {
         socketId:    socket.id,
