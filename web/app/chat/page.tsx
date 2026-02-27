@@ -48,6 +48,19 @@ function loadChatSettings(): ChatSettings {
   return CHAT_SETTINGS_DEFAULTS
 }
 
+function getSavedDevices(): { cameraId: string; micId: string } {
+  try {
+    const s = localStorage.getItem('randoo-devices')
+    return s ? { cameraId: '', micId: '', ...JSON.parse(s) } : { cameraId: '', micId: '' }
+  } catch {
+    return { cameraId: '', micId: '' }
+  }
+}
+
+function saveDevices(cameraId: string, micId: string) {
+  localStorage.setItem('randoo-devices', JSON.stringify({ cameraId, micId }))
+}
+
 // ── Icons ────────────────────────────────────
 
 function MicIcon({ muted }: { muted: boolean }) {
@@ -66,6 +79,43 @@ function MicIcon({ muted }: { muted: boolean }) {
       <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
       <line x1="12" y1="19" x2="12" y2="23"/>
       <line x1="8" y1="23" x2="16" y2="23"/>
+    </svg>
+  )
+}
+
+function SlidersIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/>
+      <line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/>
+      <line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/>
+      <line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/>
+      <line x1="17" y1="16" x2="23" y2="16"/>
+    </svg>
+  )
+}
+
+function MonitorIcon() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+      <line x1="8" y1="21" x2="16" y2="21"/>
+      <line x1="12" y1="17" x2="12" y2="21"/>
+    </svg>
+  )
+}
+
+function SpeakerIcon({ muted }: { muted: boolean }) {
+  if (muted) return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+      <line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>
+    </svg>
+  )
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+      <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
     </svg>
   )
 }
@@ -127,6 +177,16 @@ function ChatContent() {
   const matchToastTimerRef                = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [boostSecsLeft, setBoostSecsLeft] = useState<number | null>(null)
   const [onlineCount, setOnlineCount]     = useState<number | null>(null)
+
+  // Device controls
+  const [showDeviceMenu, setShowDeviceMenu]   = useState(false)
+  const [showDevicesModal, setShowDevicesModal] = useState(false)
+  const [isRemoteMuted, setIsRemoteMuted]     = useState(false)
+  const [cameras, setCameras]                 = useState<MediaDeviceInfo[]>([])
+  const [microphones, setMicrophones]         = useState<MediaDeviceInfo[]>([])
+  const [pendingCameraId, setPendingCameraId] = useState('')
+  const [pendingMicId, setPendingMicId]       = useState('')
+  const deviceMenuRef                         = useRef<HTMLDivElement>(null)
 
   // Load settings once on mount
   useEffect(() => {
@@ -237,6 +297,18 @@ function ChatContent() {
     return () => window.removeEventListener('keydown', onKey)
   }, [handleNext])
 
+  // Close device popup on outside click
+  useEffect(() => {
+    if (!showDeviceMenu) return
+    const handler = (e: MouseEvent) => {
+      if (deviceMenuRef.current && !deviceMenuRef.current.contains(e.target as Node)) {
+        setShowDeviceMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showDeviceMenu])
+
   useEffect(() => {
     const webrtc = webrtcRef.current
     const socket = getSocket()
@@ -339,7 +411,14 @@ function ChatContent() {
       // Start camera before connecting — ensures local tracks are ready when
       // createPeerConnection is called. Fault-tolerant: socket connects even if camera fails.
       try {
-        if (localVideoRef.current) await webrtc.startLocalStream(localVideoRef.current)
+        if (localVideoRef.current) {
+          const saved = getSavedDevices()
+          await webrtc.startLocalStreamWithDevices(
+            localVideoRef.current,
+            saved.cameraId || undefined,
+            saved.micId || undefined,
+          )
+        }
       } catch (err) {
         console.warn('Camera unavailable:', err)
       }
@@ -361,6 +440,46 @@ function ChatContent() {
   const toggleMute   = () => setIsMuted(webrtcRef.current.toggleMute())
   const toggleCamera = () => setIsCameraOff(webrtcRef.current.toggleCamera())
 
+  const openDeviceMenu = async () => {
+    const nextOpen = !showDeviceMenu
+    setShowDeviceMenu(nextOpen)
+    if (nextOpen) {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        const cams = devices.filter(d => d.kind === 'videoinput')
+        const mics = devices.filter(d => d.kind === 'audioinput')
+        setCameras(cams)
+        setMicrophones(mics)
+        setPendingCameraId(webrtcRef.current.getCurrentVideoDeviceId() ?? cams[0]?.deviceId ?? '')
+        setPendingMicId(webrtcRef.current.getCurrentAudioDeviceId() ?? mics[0]?.deviceId ?? '')
+      } catch {}
+    }
+  }
+
+  const toggleRemoteSound = () => {
+    if (remoteVideoRef.current) {
+      const next = !remoteVideoRef.current.muted
+      remoteVideoRef.current.muted = next
+      setIsRemoteMuted(next)
+    }
+  }
+
+  const handleSaveDevices = async () => {
+    const webrtc = webrtcRef.current
+    try {
+      if (pendingCameraId && pendingCameraId !== webrtc.getCurrentVideoDeviceId() && localVideoRef.current) {
+        await webrtc.switchCamera(localVideoRef.current, pendingCameraId)
+      }
+      if (pendingMicId && pendingMicId !== webrtc.getCurrentAudioDeviceId()) {
+        await webrtc.switchMicrophone(pendingMicId)
+      }
+      saveDevices(pendingCameraId, pendingMicId)
+    } catch (err) {
+      console.warn('Failed to switch device:', err)
+    }
+    setShowDevicesModal(false)
+  }
+
   function formatBoostTime(secs: number) {
     const m = Math.floor(secs / 60).toString().padStart(2, '0')
     const s = (secs % 60).toString().padStart(2, '0')
@@ -368,6 +487,7 @@ function ChatContent() {
   }
 
   return (
+    <>
     <div className="h-screen w-screen bg-black flex flex-col overflow-hidden">
 
       {/* ── Header ── */}
@@ -498,6 +618,60 @@ function ChatContent() {
             </div>
           )}
         </div>
+
+        {/* Device controls — top-right of video area */}
+        <div ref={deviceMenuRef} className="absolute top-3 right-3" style={{ zIndex: 25 }}>
+          <button
+            onClick={openDeviceMenu}
+            className="w-9 h-9 rounded-full flex items-center justify-center transition-all hover:opacity-90 active:scale-95"
+            style={{ background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(8px)', color: 'rgba(255,255,255,0.8)', border: '1px solid rgba(255,255,255,0.1)' }}
+          >
+            <SlidersIcon />
+          </button>
+
+          {showDeviceMenu && (
+            <div
+              className="absolute top-11 right-0 rounded-2xl p-2.5 grid grid-cols-3 gap-1"
+              style={{ background: 'rgba(30,30,30,0.96)', backdropFilter: 'blur(20px)', border: '1px solid rgba(255,255,255,0.08)', minWidth: 230, boxShadow: '0 8px 32px rgba(0,0,0,0.6)' }}
+            >
+              <button
+                onClick={() => { setShowDevicesModal(true); setShowDeviceMenu(false) }}
+                className="flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl transition-all hover:bg-white/8"
+                style={{ color: 'rgba(255,255,255,0.75)' }}
+              >
+                <MonitorIcon />
+                <span className="text-[11px] font-medium">Devices</span>
+              </button>
+
+              <button
+                onClick={toggleRemoteSound}
+                className="flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl transition-all hover:bg-white/8"
+                style={{ color: isRemoteMuted ? 'var(--color-error)' : 'rgba(255,255,255,0.75)' }}
+              >
+                <SpeakerIcon muted={isRemoteMuted} />
+                <span className="text-[11px] font-medium">Sound ({isRemoteMuted ? 'Off' : 'On'})</span>
+              </button>
+
+              <button
+                onClick={toggleCamera}
+                className="flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl transition-all hover:bg-white/8"
+                style={{ color: isCameraOff ? 'var(--color-error)' : 'rgba(255,255,255,0.75)' }}
+              >
+                <CamIcon off={isCameraOff} />
+                <span className="text-[11px] font-medium">Video ({isCameraOff ? 'Off' : 'On'})</span>
+              </button>
+
+              <button
+                onClick={toggleMute}
+                className="flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl transition-all hover:bg-white/8"
+                style={{ color: isMuted ? 'var(--color-error)' : 'rgba(255,255,255,0.75)' }}
+              >
+                <MicIcon muted={isMuted} />
+                <span className="text-[11px] font-medium">Mic ({isMuted ? 'Off' : 'On'})</span>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Bottom bar ── */}
@@ -514,7 +688,7 @@ function ChatContent() {
           <span className="text-xs font-medium leading-tight" style={{ opacity: 0.5 }}>Esc</span>
         </button>
 
-        {/* Mic + Cam toggles */}
+        {/* Mic + Cam toggles (kept for quick access) */}
         <div className="flex items-center gap-3">
           <button
             onClick={toggleMute}
@@ -540,6 +714,66 @@ function ChatContent() {
         </div>
       </div>
     </div>
+
+    {/* Devices modal */}
+    {showDevicesModal && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center px-4"
+        style={{ background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(6px)' }}
+        onMouseDown={e => { if (e.target === e.currentTarget) setShowDevicesModal(false) }}
+      >
+        <div className="w-full max-w-md rounded-2xl p-6" style={{ background: '#111', border: '1px solid var(--theme-border)' }}>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-white font-bold text-xl">Devices</h2>
+            <button
+              onClick={() => setShowDevicesModal(false)}
+              className="text-white/40 hover:text-white transition-colors text-lg leading-none"
+            >✕</button>
+          </div>
+
+          <p className="text-white/50 text-sm font-semibold mb-2">Audio</p>
+          <select
+            value={pendingMicId}
+            onChange={e => setPendingMicId(e.target.value)}
+            className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+            style={{ background: '#1a1a1a', color: 'white', border: '1px solid var(--theme-border)' }}
+          >
+            {microphones.map(m => (
+              <option key={m.deviceId} value={m.deviceId}>
+                {m.label || `Microphone (${m.deviceId.slice(0, 8)})`}
+              </option>
+            ))}
+          </select>
+
+          <div className="my-4" style={{ borderTop: '1px solid var(--theme-border)' }} />
+
+          <p className="text-white/50 text-sm font-semibold mb-2">Video</p>
+          <select
+            value={pendingCameraId}
+            onChange={e => setPendingCameraId(e.target.value)}
+            className="w-full px-4 py-3 rounded-xl text-sm outline-none"
+            style={{ background: '#1a1a1a', color: 'white', border: '1px solid var(--theme-border)' }}
+          >
+            {cameras.map(c => (
+              <option key={c.deviceId} value={c.deviceId}>
+                {c.label || `Camera (${c.deviceId.slice(0, 8)})`}
+              </option>
+            ))}
+          </select>
+
+          <div className="flex justify-end mt-6">
+            <button
+              onClick={handleSaveDevices}
+              className="px-8 py-2.5 rounded-full font-bold text-sm transition-all hover:brightness-90 active:scale-95"
+              style={{ background: 'white', color: '#000' }}
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   )
 }
 

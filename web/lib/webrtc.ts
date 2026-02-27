@@ -20,6 +20,76 @@ export class WebRTCManager {
     return this.localStream
   }
 
+  async startLocalStreamWithDevices(
+    videoEl: HTMLVideoElement,
+    videoDeviceId?: string,
+    audioDeviceId?: string,
+  ): Promise<MediaStream> {
+    try {
+      this.localStream = await navigator.mediaDevices.getUserMedia({
+        video: videoDeviceId
+          ? { deviceId: { exact: videoDeviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+          : { width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: audioDeviceId ? { deviceId: { exact: audioDeviceId } } : true,
+      })
+    } catch {
+      // Saved device unavailable — fall back to default
+      this.localStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: true,
+      })
+    }
+    videoEl.srcObject = this.localStream
+    return this.localStream
+  }
+
+  async switchCamera(videoEl: HTMLVideoElement, deviceId: string): Promise<void> {
+    const s = await navigator.mediaDevices.getUserMedia({
+      video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false,
+    })
+    const newTrack = s.getVideoTracks()[0]
+    const oldTrack = this.localStream?.getVideoTracks()[0]
+    if (oldTrack) newTrack.enabled = oldTrack.enabled
+    if (this.pc) {
+      const sender = this.pc.getSenders().find(s => s.track?.kind === 'video')
+      if (sender) await sender.replaceTrack(newTrack)
+    }
+    if (this.localStream && oldTrack) {
+      this.localStream.removeTrack(oldTrack)
+      oldTrack.stop()
+    }
+    this.localStream?.addTrack(newTrack)
+    videoEl.srcObject = this.localStream
+  }
+
+  async switchMicrophone(deviceId: string): Promise<void> {
+    const s = await navigator.mediaDevices.getUserMedia({
+      audio: { deviceId: { exact: deviceId } },
+      video: false,
+    })
+    const newTrack = s.getAudioTracks()[0]
+    const oldTrack = this.localStream?.getAudioTracks()[0]
+    if (oldTrack) newTrack.enabled = oldTrack.enabled
+    if (this.pc) {
+      const sender = this.pc.getSenders().find(s => s.track?.kind === 'audio')
+      if (sender) await sender.replaceTrack(newTrack)
+    }
+    if (this.localStream && oldTrack) {
+      this.localStream.removeTrack(oldTrack)
+      oldTrack.stop()
+    }
+    this.localStream?.addTrack(newTrack)
+  }
+
+  getCurrentVideoDeviceId(): string | undefined {
+    return this.localStream?.getVideoTracks()[0]?.getSettings().deviceId
+  }
+
+  getCurrentAudioDeviceId(): string | undefined {
+    return this.localStream?.getAudioTracks()[0]?.getSettings().deviceId
+  }
+
   createPeerConnection(
     onRemoteStream: (stream: MediaStream) => void,
     onIceCandidate: (candidate: RTCIceCandidate) => void,
