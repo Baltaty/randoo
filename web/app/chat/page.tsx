@@ -602,10 +602,17 @@ function ChatContent() {
             </div>
           )}
 
-          {/* Label */}
-          <div className="absolute bottom-3 left-3 z-20 px-2.5 py-1 rounded-lg text-xs font-semibold"
-            style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', color: 'rgba(255,255,255,0.7)' }}>
-            Stranger
+          {/* Watermark */}
+          <div className="absolute bottom-3 left-3 z-20 flex items-center gap-1.5 pointer-events-none select-none"
+            style={{ opacity: 0.35 }}>
+            <svg width="16" height="20" viewBox="0 0 44 52" fill="none">
+              <path d="M 10 18 C 10 8 34 8 34 18 C 34 26 24 28 22 32"
+                stroke="white" strokeWidth="9" strokeLinecap="round"/>
+              <circle cx="22" cy="46" r="5" fill="white"/>
+            </svg>
+            <span className="text-white font-bold italic text-base tracking-tight" style={{ fontSize: 17 }}>
+              randoo.fun
+            </span>
           </div>
         </div>
 
