@@ -1,0 +1,6 @@
+node_modules/
+.profile-bot-*/
+videos/*.mp4
+videos/*.mov
+videos/*.y4m
+!videos/.gitkeep

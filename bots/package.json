@@ -1,0 +1,11 @@
+{
+  "name": "randoo-bots",
+  "version": "1.0.0",
+  "description": "Local bot runner for Randoo — fake camera via pre-recorded video",
+  "scripts": {
+    "start": "node run.js"
+  },
+  "dependencies": {
+    "playwright": "^1.52.0"
+  }
+}
