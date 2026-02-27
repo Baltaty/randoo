@@ -553,7 +553,7 @@ function ChatContent() {
       )}
 
       {/* ── Video area ── */}
-      <div className="flex-1 flex overflow-hidden bg-black">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden bg-black">
 
         {/* Remote video (left half) */}
         <div className="flex-1 relative overflow-hidden bg-black">
@@ -610,7 +610,7 @@ function ChatContent() {
         </div>
 
         {/* Divider */}
-        <div className="w-px flex-shrink-0" style={{ background: 'rgba(255,255,255,0.06)' }} />
+        <div className="h-px md:h-auto md:w-px flex-shrink-0" style={{ background: 'rgba(255,255,255,0.06)' }} />
 
         {/* Local video (right half) */}
         <div className="flex-1 relative overflow-hidden" style={{ background: '#0d0d0d' }}>
