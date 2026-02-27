@@ -5,11 +5,12 @@ import { useRouter } from 'next/navigation'
 import LiveGlobe from './LiveGlobe'
 
 interface LogEntry {
-  ts:        number
-  ip?:       string
-  country?:  string
-  gender?:   string
-  interests: string[]
+  ts:         number
+  ip?:        string
+  country?:   string
+  gender?:    string
+  interests:  string[]
+  duration?:  number
 }
 
 interface Stats {
@@ -39,6 +40,19 @@ function fmt(n: number) {
 
 function fmtMoney(n: number) {
   return '$' + n.toFixed(2)
+}
+
+function fmtDate(ts: number) {
+  return new Date(ts).toLocaleString('en-US', {
+    month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  })
+}
+
+function fmtDuration(secs?: number) {
+  if (secs === undefined) return '—'
+  if (secs < 60) return `${secs}s`
+  return `${Math.floor(secs / 60)}m ${secs % 60}s`
 }
 
 function StatRow({ label, value, accent }: { label: string; value: string; accent?: string }) {
@@ -201,49 +215,65 @@ export default function Dashboard() {
           <span className="text-xs ml-auto" style={{ color: '#333' }}>last 100</span>
         </div>
 
-        <div style={{ overflowY: 'auto', maxHeight: 360 }}>
-          <table className="w-full text-sm">
-            <thead>
-              <tr style={{ borderBottom: '1px solid #1a1a1a' }}>
-                {['Time', 'Country', 'IP', 'Gender', 'Interests'].map(h => (
-                  <th key={h} className="text-left px-5 py-2 text-xs font-semibold"
-                    style={{ color: '#333', whiteSpace: 'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(stats?.live.log ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-5 py-6 text-xs text-center" style={{ color: '#333' }}>
-                    No connections yet — will fill up as users join
-                  </td>
-                </tr>
-              )}
-              {(stats?.live.log ?? []).map((entry, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #141414' }}
-                  className="transition-colors hover:bg-white/[0.02]">
-                  <td className="px-5 py-2.5 text-xs tabular-nums" style={{ color: '#555', whiteSpace: 'nowrap' }}>
-                    {/* tick drives re-render for "Xs ago" */}
-                    {void tick}{timeAgo(entry.ts)}
-                  </td>
-                  <td className="px-5 py-2.5 text-xs" style={{ whiteSpace: 'nowrap' }}>
-                    <span className="mr-1.5">{countryFlag(entry.country)}</span>
-                    <span style={{ color: '#666' }}>{entry.country ?? '—'}</span>
-                  </td>
-                  <td className="px-5 py-2.5 text-xs font-mono" style={{ color: '#555' }}>
-                    {entry.ip ?? '—'}
-                  </td>
-                  <td className="px-5 py-2.5 text-xs" style={{ color: '#555' }}>
-                    {entry.gender ?? '—'}
-                  </td>
-                  <td className="px-5 py-2.5 text-xs" style={{ color: '#555' }}>
-                    {entry.interests.length > 0 ? entry.interests.join(', ') : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {(() => {
+          // Deduplicate by IP — keep most recent entry per IP (log is ordered newest first)
+          const seen = new Set<string>()
+          const uniqueLog: LogEntry[] = []
+          for (const entry of (stats?.live.log ?? [])) {
+            const key = entry.ip ?? `anon-${entry.ts}`
+            if (!seen.has(key)) { seen.add(key); uniqueLog.push(entry) }
+          }
+          return (
+            <div style={{ overflowY: 'auto', maxHeight: 360 }}>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #1a1a1a' }}>
+                    {['Date', 'Time ago', 'Country', 'IP', 'Gender', 'Duration', 'Interests'].map(h => (
+                      <th key={h} className="text-left px-5 py-2 text-xs font-semibold"
+                        style={{ color: '#333', whiteSpace: 'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {uniqueLog.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-5 py-6 text-xs text-center" style={{ color: '#333' }}>
+                        No connections yet — will fill up as users join
+                      </td>
+                    </tr>
+                  )}
+                  {uniqueLog.map((entry, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid #141414' }}
+                      className="transition-colors hover:bg-white/[0.02]">
+                      <td className="px-5 py-2.5 text-xs tabular-nums" style={{ color: '#444', whiteSpace: 'nowrap' }}>
+                        {fmtDate(entry.ts)}
+                      </td>
+                      <td className="px-5 py-2.5 text-xs tabular-nums" style={{ color: '#555', whiteSpace: 'nowrap' }}>
+                        {void tick}{timeAgo(entry.ts)}
+                      </td>
+                      <td className="px-5 py-2.5 text-xs" style={{ whiteSpace: 'nowrap' }}>
+                        <span className="mr-1.5">{countryFlag(entry.country)}</span>
+                        <span style={{ color: '#666' }}>{entry.country ?? '—'}</span>
+                      </td>
+                      <td className="px-5 py-2.5 text-xs font-mono" style={{ color: '#555' }}>
+                        {entry.ip ?? '—'}
+                      </td>
+                      <td className="px-5 py-2.5 text-xs" style={{ color: '#555' }}>
+                        {entry.gender ?? '—'}
+                      </td>
+                      <td className="px-5 py-2.5 text-xs tabular-nums" style={{ color: entry.duration ? '#3beea8' : '#333', whiteSpace: 'nowrap' }}>
+                        {fmtDuration(entry.duration)}
+                      </td>
+                      <td className="px-5 py-2.5 text-xs" style={{ color: '#555' }}>
+                        {entry.interests.length > 0 ? entry.interests.join(', ') : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
+        })()}
       </div>
 
       {/* Boost breakdown */}

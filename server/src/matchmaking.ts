@@ -46,15 +46,18 @@ const waitTimers = new Map<string, ReturnType<typeof setTimeout>>()
 // ── Connection log ────────────────────────────
 
 interface LogEntry {
-  ts:        number
-  ip?:       string
-  country?:  string
-  gender?:   string
-  interests: string[]
+  ts:         number
+  ip?:        string
+  country?:   string
+  gender?:    string
+  interests:  string[]
+  matchedAt?: number   // epoch ms when matched
+  duration?:  number   // seconds of conversation
 }
 
 const MAX_LOG = 100
 const connectionLog: LogEntry[] = []
+const socketToLog = new Map<string, LogEntry>()
 
 function addLog(entry: LogEntry) {
   connectionLog.unshift(entry)
@@ -160,6 +163,14 @@ function createRoom(a: UserInfo, b: UserInfo, io: Server) {
   // Only reveal a peer's country if they have a country resolved (privacy mode = no country sent)
   io.to(a.socketId).emit('matched', { roomId, initiator: true,  peerGender: b.gender, peerCountry: b.country, commonInterests })
   io.to(b.socketId).emit('matched', { roomId, initiator: false, peerGender: a.gender, peerCountry: a.country, commonInterests })
+
+  // Track match start time in both log entries
+  const matchedAt = Date.now()
+  const logA = socketToLog.get(a.socketId)
+  const logB = socketToLog.get(b.socketId)
+  if (logA) logA.matchedAt = matchedAt
+  if (logB) logB.matchedAt = matchedAt
+
   console.log(`[match] ${a.socketId} <-> ${b.socketId} → ${roomId}`)
 }
 
@@ -169,6 +180,16 @@ function leaveRoom(socketId: string, io: Server) {
       const peerId = a === socketId ? b : a
       rooms.delete(roomId)
       io.to(peerId).emit('peer-disconnected')
+
+      // Record duration for both participants
+      const endedAt = Date.now()
+      for (const sid of [socketId, peerId]) {
+        const log = socketToLog.get(sid)
+        if (log?.matchedAt) {
+          log.duration = Math.floor((endedAt - log.matchedAt) / 1000)
+        }
+      }
+
       console.log(`[room] ${roomId} closed — ${socketId} left`)
       break
     }
@@ -222,13 +243,15 @@ export function setupMatchmaking(io: Server) {
       }
 
       const ip = resolveIP(socket)
-      addLog({
+      const logEntry: LogEntry = {
         ts:        Date.now(),
         ip,
         country:   data.privacyMode ? undefined : geoip.lookup(ip ?? '')?.country ?? undefined,
         gender:    data.gender,
         interests: Array.isArray(data.interests) ? data.interests.slice(0, 5) : [],
-      })
+      }
+      addLog(logEntry)
+      socketToLog.set(socket.id, logEntry)
 
       const user: UserInfo = {
         socketId:    socket.id,
@@ -293,6 +316,7 @@ export function setupMatchmaking(io: Server) {
       removeFromQueue(socket.id)
       clearTimer(socket.id)
       leaveRoom(socket.id, io)
+      socketToLog.delete(socket.id)
       console.log(`[-] ${socket.id}`)
       broadcastCount()
     })
