@@ -34,8 +34,8 @@ app.get('/stats', (req, res) => {
   if (secret && req.headers.authorization !== `Bearer ${secret}`) {
     res.status(401).json({ error: 'Unauthorized' }); return
   }
-  const { queue, rooms } = getStats()
-  res.json({ status: 'ok', clients: io.engine.clientsCount, queue, rooms })
+  const { queue, rooms, log } = getStats()
+  res.json({ status: 'ok', clients: io.engine.clientsCount, queue, rooms, log })
 })
 
 setupMatchmaking(io)
