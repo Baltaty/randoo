@@ -92,17 +92,17 @@ export default function LiveGlobe({ log }: { log: LogEntry[] }) {
 
   if (log.length === 0) {
     return (
-      <div className="flex items-center justify-center" style={{ height: 420 }}>
+      <div className="flex items-center justify-center" style={{ height: 680 }}>
         <p className="text-xs" style={{ color: '#333' }}>No data yet</p>
       </div>
     )
   }
 
   return (
-    <div style={{ height: 420, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+    <div style={{ height: 680, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
       <Globe
-        width={680}
-        height={420}
+        width={1000}
+        height={680}
         backgroundColor="rgba(0,0,0,0)"
         globeImageUrl="https://unpkg.com/three-globe/example/img/earth-night.jpg"
         atmosphereColor="#ffd53a"
