@@ -159,7 +159,7 @@ export default function Home() {
           <div className="flex flex-col gap-2">
             <span className="text-xs font-semibold px-1" style={{ color: 'var(--theme-text-muted)' }}>{t('home.iam')}</span>
             <div className="flex gap-1.5">
-              {([['M', 'home.gender.man'], ['F', 'home.gender.woman'], ['O', 'home.gender.other']] as const).map(([v, key]) => (
+              {([['M', 'home.gender.man', '👨'], ['F', 'home.gender.woman', '👩'], ['O', 'home.gender.other', '🌈']] as const).map(([v, key, emoji]) => (
                 <button
                   key={v}
                   onClick={() => setMyGender(g => g === v ? '' : v)}
@@ -169,7 +169,7 @@ export default function Home() {
                     color: myGender === v ? 'var(--theme-btn-fg)' : 'var(--theme-text-muted)',
                     border: '1px solid var(--theme-border)',
                   }}
-                >{t(key)}</button>
+                >{emoji} {t(key)}</button>
               ))}
             </div>
           </div>
@@ -178,7 +178,7 @@ export default function Home() {
           <div className="flex flex-col gap-2">
             <span className="text-xs font-semibold px-1" style={{ color: 'var(--theme-text-muted)' }}>{t('home.looking_for')}</span>
             <div className="flex gap-1.5">
-              {([['M', 'home.gender.men'], ['F', 'home.gender.women'], ['all', 'home.gender.both']] as const).map(([v, key]) => (
+              {([['M', 'home.gender.men', '👨'], ['F', 'home.gender.women', '👩'], ['all', 'home.gender.both', '💫']] as const).map(([v, key, emoji]) => (
                 <button
                   key={v}
                   onClick={() => setLookingFor(v)}
@@ -188,7 +188,7 @@ export default function Home() {
                     color: lookingFor === v ? 'var(--theme-btn-fg)' : 'var(--theme-text-muted)',
                     border: '1px solid var(--theme-border)',
                   }}
-                >{t(key)}</button>
+                >{emoji} {t(key)}</button>
               ))}
             </div>
           </div>
