@@ -18,7 +18,7 @@ export default function Home() {
   const tagInputRef = useRef<HTMLInputElement>(null)
 
   const [myGender, setMyGender]   = useState<string>(() => {
-    try { return JSON.parse(localStorage.getItem('randoo-settings') ?? '{}').yourSex ?? '' } catch { return '' }
+    try { return JSON.parse(localStorage.getItem('randoo-settings') ?? '{}').yourSex ?? 'M' } catch { return 'M' }
   })
   const [lookingFor, setLookingFor] = useState<string>(() => {
     try { return JSON.parse(localStorage.getItem('randoo-settings') ?? '{}').lookingFor ?? 'all' } catch { return 'all' }
