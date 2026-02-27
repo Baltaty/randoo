@@ -43,15 +43,38 @@ const queue: UserInfo[] = []
 const rooms = new Map<string, [string, string]>() // roomId -> [socketA, socketB]
 const waitTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
+// ── Connection log ────────────────────────────
+
+interface LogEntry {
+  ts:        number
+  ip?:       string
+  country?:  string
+  gender?:   string
+  interests: string[]
+}
+
+const MAX_LOG = 100
+const connectionLog: LogEntry[] = []
+
+function addLog(entry: LogEntry) {
+  connectionLog.unshift(entry)
+  if (connectionLog.length > MAX_LOG) connectionLog.pop()
+}
+
 // ── IP → country ─────────────────────────────
 
-function resolveCountry(socket: Socket): string | undefined {
-  // In production behind a proxy (Railway, Vercel), the real IP is in x-forwarded-for
+function resolveIP(socket: Socket): string | undefined {
   const forwarded = socket.handshake.headers['x-forwarded-for']
   const rawIp = (typeof forwarded === 'string' ? forwarded.split(',')[0] : undefined)
     ?? socket.handshake.address
-  const ip = rawIp?.replace(/^::ffff:/, '') // strip IPv4-mapped IPv6 prefix
+  const ip = rawIp?.replace(/^::ffff:/, '')
   if (!ip || ip === '127.0.0.1' || ip === '::1') return undefined
+  return ip
+}
+
+function resolveCountry(socket: Socket): string | undefined {
+  const ip = resolveIP(socket)
+  if (!ip) return undefined
   return geoip.lookup(ip)?.country ?? undefined
 }
 
@@ -161,7 +184,7 @@ function getPeer(socketId: string, roomId: string): string | null {
 // ── Setup ────────────────────────────────────
 
 export function getStats() {
-  return { queue: queue.length, rooms: rooms.size }
+  return { queue: queue.length, rooms: rooms.size, log: connectionLog }
 }
 
 export function setupMatchmaking(io: Server) {
@@ -194,6 +217,15 @@ export function setupMatchmaking(io: Server) {
           wantGender  = boost.wantGender
         }
       }
+
+      const ip = resolveIP(socket)
+      addLog({
+        ts:        Date.now(),
+        ip,
+        country:   data.privacyMode ? undefined : geoip.lookup(ip ?? '')?.country ?? undefined,
+        gender:    data.gender,
+        interests: Array.isArray(data.interests) ? data.interests.slice(0, 5) : [],
+      })
 
       const user: UserInfo = {
         socketId:    socket.id,

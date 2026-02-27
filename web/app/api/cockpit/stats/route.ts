@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   // ── Live stats from Railway ──────────────────────────
   const serverUrl = process.env.SERVER_URL
   const statsSecret = process.env.STATS_SECRET
-  let live = { clients: 0, queue: 0, rooms: 0 }
+  let live: { clients: number; queue: number; rooms: number; log?: unknown[] } = { clients: 0, queue: 0, rooms: 0 }
   try {
     const res = await fetch(`${serverUrl}/stats`, {
       headers: statsSecret ? { Authorization: `Bearer ${statsSecret}` } : {},
@@ -60,6 +60,7 @@ export async function GET(req: NextRequest) {
       online: live.clients,
       queue:  live.queue,
       rooms:  live.rooms,
+      log:    live.log ?? [],
     },
     today: {
       signups: todaySignups,

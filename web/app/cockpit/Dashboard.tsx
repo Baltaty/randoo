@@ -3,10 +3,33 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 
+interface LogEntry {
+  ts:        number
+  ip?:       string
+  country?:  string
+  gender?:   string
+  interests: string[]
+}
+
 interface Stats {
-  live:    { online: number; queue: number; rooms: number }
+  live:    { online: number; queue: number; rooms: number; log: LogEntry[] }
   today:   { signups: number; revenue: number; boosts: number }
   alltime: { users: number; revenue: number; boosts: number }
+}
+
+function timeAgo(ts: number) {
+  const s = Math.floor((Date.now() - ts) / 1000)
+  if (s < 5)  return 'just now'
+  if (s < 60) return `${s}s ago`
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  return `${Math.floor(s / 3600)}h ago`
+}
+
+function countryFlag(code?: string) {
+  if (!code) return '🌐'
+  return code.toUpperCase().split('').map(c =>
+    String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)
+  ).join('')
 }
 
 function fmt(n: number) {
@@ -151,6 +174,61 @@ export default function Dashboard() {
           <StatRow label="Total boosts"  value={stats ? fmt(stats.alltime.boosts)        : '…'} />
         </Card>
 
+      </div>
+
+      {/* Recent connections */}
+      <div className="mt-4 rounded-2xl overflow-hidden" style={{ background: '#111', border: '1px solid #1e1e1e' }}>
+        <div className="px-5 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #1e1e1e' }}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#3beea8', boxShadow: '0 0 5px #3beea8' }} />
+          <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#444' }}>
+            Recent connections
+          </span>
+          <span className="text-xs ml-auto" style={{ color: '#333' }}>last 100</span>
+        </div>
+
+        <div style={{ overflowY: 'auto', maxHeight: 360 }}>
+          <table className="w-full text-sm">
+            <thead>
+              <tr style={{ borderBottom: '1px solid #1a1a1a' }}>
+                {['Time', 'Country', 'IP', 'Gender', 'Interests'].map(h => (
+                  <th key={h} className="text-left px-5 py-2 text-xs font-semibold"
+                    style={{ color: '#333', whiteSpace: 'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {(stats?.live.log ?? []).length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-5 py-6 text-xs text-center" style={{ color: '#333' }}>
+                    No connections yet — will fill up as users join
+                  </td>
+                </tr>
+              )}
+              {(stats?.live.log ?? []).map((entry, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid #141414' }}
+                  className="transition-colors hover:bg-white/[0.02]">
+                  <td className="px-5 py-2.5 text-xs tabular-nums" style={{ color: '#555', whiteSpace: 'nowrap' }}>
+                    {/* tick drives re-render for "Xs ago" */}
+                    {void tick}{timeAgo(entry.ts)}
+                  </td>
+                  <td className="px-5 py-2.5 text-xs" style={{ whiteSpace: 'nowrap' }}>
+                    <span className="mr-1.5">{countryFlag(entry.country)}</span>
+                    <span style={{ color: '#666' }}>{entry.country ?? '—'}</span>
+                  </td>
+                  <td className="px-5 py-2.5 text-xs font-mono" style={{ color: '#555' }}>
+                    {entry.ip ?? '—'}
+                  </td>
+                  <td className="px-5 py-2.5 text-xs" style={{ color: '#555' }}>
+                    {entry.gender ?? '—'}
+                  </td>
+                  <td className="px-5 py-2.5 text-xs" style={{ color: '#555' }}>
+                    {entry.interests.length > 0 ? entry.interests.join(', ') : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Boost breakdown */}
