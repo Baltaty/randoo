@@ -160,6 +160,10 @@ function getPeer(socketId: string, roomId: string): string | null {
 
 // ── Setup ────────────────────────────────────
 
+export function getStats() {
+  return { queue: queue.length, rooms: rooms.size }
+}
+
 export function setupMatchmaking(io: Server) {
   const broadcastCount = () => io.emit('online-count', io.engine.clientsCount)
 

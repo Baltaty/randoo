@@ -3,7 +3,7 @@ import express from 'express'
 import { createServer } from 'http'
 import { Server } from 'socket.io'
 import cors from 'cors'
-import { setupMatchmaking } from './matchmaking'
+import { setupMatchmaking, getStats } from './matchmaking'
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
@@ -27,6 +27,16 @@ app.get('/health', (_req, res) => res.json({
   status: 'ok',
   onlineCount: io.engine.clientsCount,
 }))
+
+// Stats endpoint — used by /cockpit (protected by STATS_SECRET)
+app.get('/stats', (req, res) => {
+  const secret = process.env.STATS_SECRET
+  if (secret && req.headers.authorization !== `Bearer ${secret}`) {
+    res.status(401).json({ error: 'Unauthorized' }); return
+  }
+  const { queue, rooms } = getStats()
+  res.json({ status: 'ok', clients: io.engine.clientsCount, queue, rooms })
+})
 
 setupMatchmaking(io)
 
