@@ -553,57 +553,67 @@ function ChatContent() {
       )}
 
       {/* ── Video area ── */}
-      <div className="flex-1 relative overflow-hidden bg-black">
+      <div className="flex-1 flex overflow-hidden bg-black">
 
-        {/* Remote video */}
-        <video
-          ref={remoteVideoRef}
-          autoPlay
-          playsInline
-          className="absolute inset-0 w-full h-full object-cover"
-        />
+        {/* Remote video (left half) */}
+        <div className="flex-1 relative overflow-hidden bg-black">
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            className="w-full h-full object-cover"
+          />
 
-        {/* Status overlay */}
-        {status !== 'matched' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-10">
-            {status === 'connecting' && (
-              <>
-                <div className="w-10 h-10 rounded-full border-2 animate-spin mb-4"
-                  style={{ borderColor: 'rgba(var(--theme-accent-rgb), 0.3)', borderTopColor: 'var(--theme-accent)', borderStyle: 'solid' }} />
-                <p className="text-sm font-medium" style={{ color: 'var(--theme-text-muted)' }}>{t('chat.connecting')}</p>
-              </>
-            )}
-            {status === 'waiting' && (
-              <>
-                <div className="w-10 h-10 rounded-full border-2 animate-spin mb-5"
-                  style={{ borderColor: 'rgba(var(--theme-accent-rgb), 0.25)', borderTopColor: 'var(--theme-accent)', borderStyle: 'solid' }} />
-                <p className="font-semibold text-lg mb-1" style={{ color: 'var(--theme-text)' }}>{t('chat.waiting.title')}</p>
-                <p className="text-sm" style={{ color: 'var(--theme-text-muted)' }}>{t('chat.waiting.subtitle')}</p>
-              </>
-            )}
-            {status === 'disconnected' && (
-              <>
-                <p className="text-white font-semibold text-lg mb-1">{t('chat.left.title')}</p>
-                <p className="text-white/30 text-sm">{t('chat.left.hint', { key: 'Esc' })}</p>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Match toast — appears at top when connected */}
-        {matchToast && (
-          <div className="absolute top-4 left-1/2 z-30 pointer-events-none"
-            style={{ transform: 'translateX(-50%)', animation: 'fadeInDown 0.3s ease' }}>
-            <div className="px-4 py-2.5 rounded-2xl text-sm font-medium text-white text-center max-w-xs"
-              style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)' }}>
-              {matchToast}
+          {/* Status overlay */}
+          {status !== 'matched' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-black z-10">
+              {status === 'connecting' && (
+                <>
+                  <div className="w-10 h-10 rounded-full border-2 animate-spin mb-4"
+                    style={{ borderColor: 'rgba(var(--theme-accent-rgb), 0.3)', borderTopColor: 'var(--theme-accent)', borderStyle: 'solid' }} />
+                  <p className="text-sm font-medium" style={{ color: 'var(--theme-text-muted)' }}>{t('chat.connecting')}</p>
+                </>
+              )}
+              {status === 'waiting' && (
+                <>
+                  <div className="w-10 h-10 rounded-full border-2 animate-spin mb-5"
+                    style={{ borderColor: 'rgba(var(--theme-accent-rgb), 0.25)', borderTopColor: 'var(--theme-accent)', borderStyle: 'solid' }} />
+                  <p className="font-semibold text-lg mb-1" style={{ color: 'var(--theme-text)' }}>{t('chat.waiting.title')}</p>
+                  <p className="text-sm" style={{ color: 'var(--theme-text-muted)' }}>{t('chat.waiting.subtitle')}</p>
+                </>
+              )}
+              {status === 'disconnected' && (
+                <>
+                  <p className="text-white font-semibold text-lg mb-1">{t('chat.left.title')}</p>
+                  <p className="text-white/30 text-sm">{t('chat.left.hint', { key: 'Esc' })}</p>
+                </>
+              )}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Local video — PIP bottom-right */}
-        <div className="absolute bottom-5 right-5 z-20 rounded-2xl overflow-hidden shadow-2xl"
-          style={{ width: 140, height: 190, border: '2px solid rgba(255,255,255,0.08)' }}>
+          {/* Match toast */}
+          {matchToast && (
+            <div className="absolute top-4 left-1/2 z-30 pointer-events-none"
+              style={{ transform: 'translateX(-50%)', animation: 'fadeInDown 0.3s ease' }}>
+              <div className="px-4 py-2.5 rounded-2xl text-sm font-medium text-white text-center max-w-xs"
+                style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.1)' }}>
+                {matchToast}
+              </div>
+            </div>
+          )}
+
+          {/* Label */}
+          <div className="absolute bottom-3 left-3 z-20 px-2.5 py-1 rounded-lg text-xs font-semibold"
+            style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', color: 'rgba(255,255,255,0.7)' }}>
+            Stranger
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div className="w-px flex-shrink-0" style={{ background: 'rgba(255,255,255,0.06)' }} />
+
+        {/* Local video (right half) */}
+        <div className="flex-1 relative overflow-hidden" style={{ background: '#0d0d0d' }}>
           <video
             ref={localVideoRef}
             autoPlay
@@ -613,14 +623,19 @@ function ChatContent() {
             style={{ transform: 'scaleX(-1)' }}
           />
           {isCameraOff && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/90">
+            <div className="absolute inset-0 flex items-center justify-center bg-black/90 z-10">
               <CamIcon off />
             </div>
           )}
-        </div>
 
-        {/* Device controls — top-right of video area */}
-        <div ref={deviceMenuRef} className="absolute top-3 right-3" style={{ zIndex: 25 }}>
+          {/* Label */}
+          <div className="absolute bottom-3 left-3 z-20 px-2.5 py-1 rounded-lg text-xs font-semibold"
+            style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', color: 'rgba(255,255,255,0.7)' }}>
+            You
+          </div>
+
+          {/* Device controls — top-right of local video */}
+          <div ref={deviceMenuRef} className="absolute top-3 right-3" style={{ zIndex: 25 }}>
           <button
             onClick={openDeviceMenu}
             className="w-9 h-9 rounded-full flex items-center justify-center transition-all hover:opacity-90 active:scale-95"
@@ -671,8 +686,9 @@ function ChatContent() {
               </button>
             </div>
           )}
-        </div>
-      </div>
+          </div>{/* end deviceMenuRef */}
+        </div>{/* end local video */}
+      </div>{/* end flex video area */}
 
       {/* ── Bottom bar ── */}
       <div className="flex-shrink-0 flex items-center justify-between px-6 py-4 border-t border-white/5 z-30"
