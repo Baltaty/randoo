@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
+import LiveGlobe from './LiveGlobe'
 
 interface LogEntry {
   ts:        number
@@ -174,6 +175,20 @@ export default function Dashboard() {
           <StatRow label="Total boosts"  value={stats ? fmt(stats.alltime.boosts)        : '…'} />
         </Card>
 
+      </div>
+
+      {/* Live globe */}
+      <div className="mt-4 rounded-2xl overflow-hidden" style={{ background: '#111', border: '1px solid #1e1e1e' }}>
+        <div className="px-5 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #1e1e1e' }}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#ffd53a', boxShadow: '0 0 5px #ffd53a' }} />
+          <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#444' }}>
+            Live visitors map
+          </span>
+          <span className="text-xs ml-auto" style={{ color: '#333' }}>
+            {stats ? `${stats.live.log.filter(e => e.country).length} located` : '…'}
+          </span>
+        </div>
+        <LiveGlobe log={stats?.live.log ?? []} />
       </div>
 
       {/* Recent connections */}
