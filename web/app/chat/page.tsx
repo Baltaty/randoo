@@ -149,6 +149,7 @@ function ChatContent() {
   const urlWantGender   = searchParams.get('wantGender')   || undefined
   const urlBoostExpires = searchParams.get('boostExpires') || undefined
   const urlInterests    = searchParams.get('interests')?.split(',').filter(Boolean) ?? []
+  const isBot           = searchParams.get('bot') === '1'
   const interestsRef    = useRef<string[]>(urlInterests)
 
   // Active boost — resolved from URL params (priority) or localStorage (persists across navigation)
@@ -277,6 +278,7 @@ function ChatContent() {
       countries:   s.countries,
       maxWait:     s.maxWait,
       interests:   interestsRef.current,
+      isBot,
     })
   }, [urlWantGender, urlBoostToken])
 

@@ -265,14 +265,15 @@ export function setupMatchmaking(io: Server) {
     broadcastCount()
 
     socket.on('join', async (data: {
-      sessionId?:  string
-      gender?:     string
-      wantGender?: string
-      boostToken?: string
-      countries?:  string[]
-      interests?:  string[]
-      maxWait?:    number
+      sessionId?:   string
+      gender?:      string
+      wantGender?:  string
+      boostToken?:  string
+      countries?:   string[]
+      interests?:   string[]
+      maxWait?:     number
       privacyMode?: boolean
+      isBot?:       boolean
     }) => {
       removeFromQueue(socket.id)
       clearTimer(socket.id)
@@ -299,9 +300,11 @@ export function setupMatchmaking(io: Server) {
         gender:    data.gender,
         interests: Array.isArray(data.interests) ? data.interests.slice(0, 5) : [],
       }
-      addLog(logEntry)
-      socketToLog.set(socket.id, logEntry)
-      sbInsertLog(logEntry).catch(() => {})
+      if (!data.isBot) {
+        addLog(logEntry)
+        socketToLog.set(socket.id, logEntry)
+        sbInsertLog(logEntry).catch(() => {})
+      }
 
       const user: UserInfo = {
         socketId:    socket.id,

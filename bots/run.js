@@ -23,7 +23,7 @@ const TARGET_ARG = process.argv[3] ?? ''
 const BASE_URL   = TARGET_ARG === 'local'
   ? 'http://localhost:3000'
   : 'https://randoo.fun'
-const CHAT_URL   = `${BASE_URL}/chat`
+const CHAT_URL   = `${BASE_URL}/chat?bot=1`
 
 const VIDEOS_DIR = path.join(__dirname, 'videos')
 
