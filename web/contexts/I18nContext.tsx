@@ -23,6 +23,11 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     if (saved === 'en' || saved === 'fr') {
       setLangState(saved)
       document.documentElement.lang = saved
+    } else {
+      // Auto-detect from browser language — FR if French, EN otherwise
+      const detected: Lang = navigator.language.toLowerCase().startsWith('fr') ? 'fr' : 'en'
+      setLangState(detected)
+      document.documentElement.lang = detected
     }
   }, [])
 

@@ -38,6 +38,17 @@ const en: Dict = {
   'chat.boost':            'Boost',
   'chat.online':           '{n}+ online',
 
+  // ── Report ───────────────────────────────────
+  'chat.report':                   'Report',
+  'chat.report.title':             'Report User',
+  'chat.report.reason.nudity':     'Nudity / Sexual content',
+  'chat.report.reason.spam':       'Spam / Bot',
+  'chat.report.reason.harassment': 'Harassment',
+  'chat.report.reason.underage':   'Suspected minor',
+  'chat.report.reason.other':      'Other',
+  'chat.report.submit':            'Report & Skip',
+  'chat.report.cancel':            'Cancel',
+
   // ── Boost ────────────────────────────────────
   'boost.subtitle':      'Choose the gender you want to match with',
   'boost.want':          'I want to talk to',
@@ -144,6 +155,17 @@ const fr: Dict = {
   'chat.new':              'New',
   'chat.boost':            'Boost',
   'chat.online':           '{n}+ en ligne',
+
+  // ── Report ───────────────────────────────────
+  'chat.report':                   'Signaler',
+  'chat.report.title':             'Signaler l\'utilisateur',
+  'chat.report.reason.nudity':     'Nudité / Contenu sexuel',
+  'chat.report.reason.spam':       'Spam / Bot',
+  'chat.report.reason.harassment': 'Harcèlement',
+  'chat.report.reason.underage':   'Mineur suspecté',
+  'chat.report.reason.other':      'Autre',
+  'chat.report.submit':            'Signaler & Passer',
+  'chat.report.cancel':            'Annuler',
 
   // ── Boost ────────────────────────────────────
   'boost.subtitle':      'Choisis le genre avec qui tu veux matcher',

@@ -112,6 +112,30 @@ async function sbUpdateDuration(entry: LogEntry): Promise<void> {
   } catch { /* ignore */ }
 }
 
+// ── Reports ───────────────────────────────────
+
+async function sbInsertReport(reporterIp: string | undefined, roomId: string, reason: string): Promise<void> {
+  const url = process.env.SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) return
+  try {
+    await fetch(`${url}/rest/v1/reports`, {
+      method: 'POST',
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        ts:           Date.now(),
+        reporter_ip:  reporterIp ?? null,
+        room_id:      roomId,
+        reason,
+      }),
+    })
+  } catch { /* ignore */ }
+}
+
 // ── IP → country ─────────────────────────────
 
 function resolveIP(socket: Socket): string | undefined {
@@ -363,6 +387,12 @@ export function setupMatchmaking(io: Server) {
 
     socket.on('next', ({ roomId }: { roomId: string }) => {
       leaveRoom(socket.id, io)
+    })
+
+    socket.on('report', ({ roomId, reason }: { roomId: string; reason: string }) => {
+      const ip = resolveIP(socket)
+      console.log(`[report] ${socket.id} reported in ${roomId} — reason: ${reason}`)
+      sbInsertReport(ip, roomId, reason).catch(() => {})
     })
 
     socket.on('disconnect', () => {

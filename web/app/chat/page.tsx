@@ -120,6 +120,15 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
   )
 }
 
+function FlagIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+      <line x1="4" y1="22" x2="4" y2="15"/>
+    </svg>
+  )
+}
+
 function CamIcon({ off }: { off: boolean }) {
   if (off) return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -178,6 +187,10 @@ function ChatContent() {
   const matchToastTimerRef                = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [boostSecsLeft, setBoostSecsLeft] = useState<number | null>(null)
   const [onlineCount, setOnlineCount]     = useState<number | null>(null)
+
+  // Report
+  const [showReportModal, setShowReportModal] = useState(false)
+  const [reportReason, setReportReason]       = useState('')
 
   // Device controls
   const [showDeviceMenu, setShowDeviceMenu]   = useState(false)
@@ -291,6 +304,16 @@ function ChatContent() {
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
     joinQueue()
   }, [joinQueue]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleReport = useCallback((reason: string) => {
+    const socket = getSocket()
+    if (roomIdRef.current) {
+      socket.emit('report', { roomId: roomIdRef.current, reason })
+    }
+    setShowReportModal(false)
+    setReportReason('')
+    handleNext()
+  }, [handleNext])
 
   // Keyboard shortcut: Esc = Next
   useEffect(() => {
@@ -736,9 +759,78 @@ function ChatContent() {
           >
             <CamIcon off={isCameraOff} />
           </button>
+
+          {status === 'matched' && (
+            <button
+              onClick={() => setShowReportModal(true)}
+              className="flex items-center gap-2 px-4 py-3 rounded-xl font-medium text-sm transition-all active:scale-95"
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)' }}
+              title={t('chat.report')}
+            >
+              <FlagIcon />
+            </button>
+          )}
         </div>
       </div>
     </div>
+
+    {/* Report modal */}
+    {showReportModal && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center px-4"
+        style={{ background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(6px)' }}
+        onMouseDown={e => { if (e.target === e.currentTarget) setShowReportModal(false) }}
+      >
+        <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: '#111', border: '1px solid var(--theme-border)' }}>
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-white font-bold text-xl">{t('chat.report.title')}</h2>
+            <button
+              onClick={() => setShowReportModal(false)}
+              className="text-white/40 hover:text-white transition-colors text-lg leading-none"
+            >✕</button>
+          </div>
+
+          <div className="flex flex-col gap-2 mb-6">
+            {(['nudity', 'spam', 'harassment', 'underage', 'other'] as const).map(reason => (
+              <button
+                key={reason}
+                onClick={() => setReportReason(reason)}
+                className="w-full px-4 py-3 rounded-xl text-sm font-medium text-left transition-all"
+                style={{
+                  background: reportReason === reason ? 'var(--color-error)' : 'rgba(255,255,255,0.06)',
+                  color: reportReason === reason ? '#fff' : 'rgba(255,255,255,0.7)',
+                  border: `1px solid ${reportReason === reason ? 'var(--color-error)' : 'transparent'}`,
+                }}
+              >
+                {t(`chat.report.reason.${reason}`)}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              onClick={() => { setShowReportModal(false); setReportReason('') }}
+              className="flex-1 px-4 py-2.5 rounded-full font-semibold text-sm transition-all"
+              style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)' }}
+            >
+              {t('chat.report.cancel')}
+            </button>
+            <button
+              onClick={() => reportReason && handleReport(reportReason)}
+              disabled={!reportReason}
+              className="flex-1 px-4 py-2.5 rounded-full font-bold text-sm transition-all active:scale-95"
+              style={{
+                background: reportReason ? 'var(--color-error)' : 'rgba(255,255,255,0.1)',
+                color: reportReason ? '#fff' : 'rgba(255,255,255,0.3)',
+                cursor: reportReason ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {t('chat.report.submit')}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
 
     {/* Devices modal */}
     {showDevicesModal && (
