@@ -8,8 +8,9 @@ function SuccessContent() {
   const searchParams = useSearchParams()
   const sessionId    = searchParams.get('session_id') ?? ''
 
-  const [status, setStatus] = useState<'polling' | 'error'>('polling')
-  const [dots,   setDots]   = useState('.')
+  const [status,   setStatus]   = useState<'polling' | 'error'>('polling')
+  const [dots,     setDots]     = useState('.')
+  const [pollKey,  setPollKey]  = useState(0) // increment to restart polling
 
   // Animated dots
   useEffect(() => {
@@ -21,9 +22,13 @@ function SuccessContent() {
     if (!sessionId) { setStatus('error'); return }
 
     let attempts = 0
-    const MAX = 30 // 30s max
+    const MAX = 60 // 60s max
+    let cancelled = false
+
+    setStatus('polling')
 
     const poll = async () => {
+      if (cancelled) return
       attempts++
       try {
         const res  = await fetch(`/api/boost-status?session_id=${encodeURIComponent(sessionId)}`)
@@ -47,7 +52,8 @@ function SuccessContent() {
     }
 
     poll()
-  }, [sessionId, router])
+    return () => { cancelled = true }
+  }, [sessionId, router, pollKey])
 
   if (status === 'error') {
     return (
@@ -58,13 +64,22 @@ function SuccessContent() {
         <p className="text-sm mb-6" style={{ color: 'var(--theme-text-muted)' }}>
           Your payment was received but activation timed out.
         </p>
-        <button
-          onClick={() => router.push('/boost')}
-          className="px-6 py-3 rounded-full font-semibold text-sm"
-          style={{ background: 'var(--theme-accent)', color: 'var(--theme-btn-fg)' }}
-        >
-          Back to Boost
-        </button>
+        <div className="flex flex-col gap-3 items-center">
+          <button
+            onClick={() => setPollKey(k => k + 1)}
+            className="px-6 py-3 rounded-full font-semibold text-sm"
+            style={{ background: 'var(--theme-accent)', color: 'var(--theme-btn-fg)' }}
+          >
+            Try again
+          </button>
+          <button
+            onClick={() => router.push('/boost')}
+            className="px-6 py-3 rounded-full font-semibold text-sm"
+            style={{ background: 'transparent', color: 'var(--theme-text-muted)', border: '1px solid var(--theme-border)' }}
+          >
+            Back to Boost
+          </button>
+        </div>
       </div>
     )
   }
