@@ -34,9 +34,10 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url)
   }
 
-  // Already logged in → don't show auth page
+  // Already logged in → don't show auth page, honour ?next= param
   if (path === '/auth' && user) {
-    return NextResponse.redirect(new URL('/', request.url))
+    const next = request.nextUrl.searchParams.get('next') || '/'
+    return NextResponse.redirect(new URL(next, request.url))
   }
 
   return response
