@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import BottomNav from '@/components/BottomNav'
 import { useI18n } from '@/contexts/I18nContext'
+import { useAuth } from '@/contexts/AuthContext'
 
 const PLANS = [
   { id: '10min', duration: '10 min', price: '$2.99', popular: false },
@@ -16,12 +17,17 @@ type WantGender = 'M' | 'F'
 export default function BoostPage() {
   const router = useRouter()
   const { t } = useI18n()
+  const { user, loading: authLoading } = useAuth()
   const [selectedPlan, setSelectedPlan] = useState<string>('30min')
   const [wantGender, setWantGender]     = useState<WantGender>('F')
   const [loading, setLoading]           = useState(false)
   const [error, setError]               = useState<string | null>(null)
 
   async function handleBoost() {
+    if (!user) {
+      router.push('/auth?next=/boost')
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -130,12 +136,17 @@ export default function BoostPage() {
         {/* CTA */}
         <button
           onClick={handleBoost}
-          disabled={loading}
+          disabled={loading || authLoading}
           className="w-full py-5 rounded-full font-semibold text-lg transition-all active:scale-[0.98] hover:brightness-95 flex items-center justify-center gap-2 disabled:opacity-60"
           style={{ background: 'var(--theme-accent)', color: 'var(--theme-btn-fg)' }}
         >
           {loading ? (
             <span>Redirecting…</span>
+          ) : !user && !authLoading ? (
+            <>
+              <span>🔒</span>
+              <span>Sign in to Boost</span>
+            </>
           ) : (
             <>
               <span>⚡</span>
