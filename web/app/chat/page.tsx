@@ -7,6 +7,7 @@ import { WebRTCManager } from '@/lib/webrtc'
 import { playMatchSound, playDisconnectSound } from '@/lib/sfx'
 import { useI18n } from '@/contexts/I18nContext'
 import { useAuth } from '@/contexts/AuthContext'
+import SettingsContent from '@/components/SettingsContent'
 
 type Status = 'connecting' | 'waiting' | 'matched' | 'disconnected'
 
@@ -191,6 +192,9 @@ function ChatContent() {
   // Report
   const [showReportModal, setShowReportModal] = useState(false)
   const [reportReason, setReportReason]       = useState('')
+
+  // Settings modal
+  const [showSettingsModal, setShowSettingsModal] = useState(false)
 
   // Device controls
   const [showDeviceMenu, setShowDeviceMenu]   = useState(false)
@@ -555,7 +559,7 @@ function ChatContent() {
 
           {/* Settings */}
           <button
-            onClick={() => router.push('/settings')}
+            onClick={() => setShowSettingsModal(true)}
             className="w-9 h-9 rounded-full flex items-center justify-center transition-all hover:opacity-70"
             style={{ color: 'var(--theme-text-muted)' }}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -625,6 +629,18 @@ function ChatContent() {
                 {matchToast}
               </div>
             </div>
+          )}
+
+          {/* Report button — top-right of remote video, only when matched */}
+          {status === 'matched' && (
+            <button
+              onClick={() => setShowReportModal(true)}
+              className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold transition-all active:scale-95 hover:brightness-90"
+              style={{ background: '#f02031', color: '#fff', backdropFilter: 'blur(8px)' }}
+              title={t('chat.report')}
+            >
+              <FlagIcon />
+            </button>
           )}
 
           {/* Watermark */}
@@ -760,16 +776,6 @@ function ChatContent() {
             <CamIcon off={isCameraOff} />
           </button>
 
-          {status === 'matched' && (
-            <button
-              onClick={() => setShowReportModal(true)}
-              className="flex items-center gap-2 px-4 py-3 rounded-xl font-medium text-sm transition-all active:scale-95"
-              style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)' }}
-              title={t('chat.report')}
-            >
-              <FlagIcon />
-            </button>
-          )}
         </div>
       </div>
     </div>
@@ -828,6 +834,41 @@ function ChatContent() {
               {t('chat.report.submit')}
             </button>
           </div>
+        </div>
+      </div>
+    )}
+
+    {/* Settings modal */}
+    {showSettingsModal && (
+      <div
+        className="fixed inset-0 z-50 flex items-end justify-center"
+        style={{ background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(6px)' }}
+        onMouseDown={e => { if (e.target === e.currentTarget) setShowSettingsModal(false) }}
+      >
+        <div
+          className="w-full max-w-2xl flex flex-col overflow-hidden"
+          style={{
+            background: 'var(--theme-surface)',
+            border: '1px solid var(--theme-border)',
+            borderBottom: 'none',
+            borderRadius: '24px 24px 0 0',
+            height: '85vh',
+          }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 pt-4 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--theme-border)' }}>
+            <span className="font-bold text-base" style={{ color: 'var(--theme-text)' }}>Settings</span>
+            <button
+              onClick={() => setShowSettingsModal(false)}
+              className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:opacity-70"
+              style={{ color: 'var(--theme-text-muted)', background: 'var(--theme-surface)' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+              </svg>
+            </button>
+          </div>
+          <SettingsContent />
         </div>
       </div>
     )}
