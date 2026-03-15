@@ -196,8 +196,9 @@ function ChatContent() {
   // Settings modal
   const [showSettingsModal, setShowSettingsModal] = useState(false)
 
-  // Boost upsell after 10 next-clicks
-  const nextCountRef = useRef(0)
+  // Boost upsell after 10 next-clicks or 10 times getting skipped
+  const nextCountRef    = useRef(0)
+  const skippedCountRef = useRef(0)
   const [showBoostUpsell, setShowBoostUpsell] = useState(false)
 
   // Device controls
@@ -440,6 +441,13 @@ function ChatContent() {
         setMatchToast(null)
         webrtc.closePeerConnection()
         if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
+
+        // Track how many times the user got skipped
+        skippedCountRef.current++
+        if (skippedCountRef.current >= 10 && !boostRef.current) {
+          setShowBoostUpsell(true)
+          skippedCountRef.current = 0
+        }
 
         if (settingsRef.current.autoRollVideo) {
           joinQueue()
