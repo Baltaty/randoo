@@ -44,6 +44,7 @@ export default function RootLayout({
           href="https://api.fontshare.com/v2/css?f[]=clash-grotesk@400,500,600,700&display=swap"
           rel="stylesheet"
         />
+        <script src="https://t.contentsquare.net/uxa/8e0e4fddeae23.js" async />
       </head>
       <body>
         <Script id="meta-pixel" strategy="afterInteractive">{`
