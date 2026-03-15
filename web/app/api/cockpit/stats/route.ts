@@ -55,6 +55,21 @@ export async function GET(req: NextRequest) {
   const todayBoosts   = allBoosts.filter(b => new Date(b.created_at) >= todayStart)
   const todayRevenue  = todayBoosts.reduce((s, b) => s + (PLAN_PRICES[b.plan] ?? 0), 0)
 
+  const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - 7); weekStart.setHours(0, 0, 0, 0)
+  const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0)
+  const weekBoosts  = allBoosts.filter(b => new Date(b.created_at) >= weekStart)
+  const monthBoosts = allBoosts.filter(b => new Date(b.created_at) >= monthStart)
+  const weekRevenue  = weekBoosts.reduce((s, b)  => s + (PLAN_PRICES[b.plan] ?? 0), 0)
+  const monthRevenue = monthBoosts.reduce((s, b) => s + (PLAN_PRICES[b.plan] ?? 0), 0)
+
+  const plans: Record<string, { count: number; revenue: number }> = {}
+  for (const b of allBoosts) {
+    const p = b.plan ?? 'unknown'
+    if (!plans[p]) plans[p] = { count: 0, revenue: 0 }
+    plans[p].count++
+    plans[p].revenue += PLAN_PRICES[p] ?? 0
+  }
+
   // ── Connection log (Supabase — persistent, full history) ─────────────
   let connectionLog: {
     ts: number; ip?: string; country?: string
@@ -99,10 +114,19 @@ export async function GET(req: NextRequest) {
       revenue: todayRevenue,
       boosts:  todayBoosts.length,
     },
+    week: {
+      revenue: weekRevenue,
+      boosts:  weekBoosts.length,
+    },
+    month: {
+      revenue: monthRevenue,
+      boosts:  monthBoosts.length,
+    },
     alltime: {
       users:   totalUsers,
       revenue: totalRevenue,
       boosts:  totalBoosts,
     },
+    plans,
   })
 }

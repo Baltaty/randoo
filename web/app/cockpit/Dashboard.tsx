@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import LiveGlobe from './LiveGlobe'
 
@@ -16,7 +16,10 @@ interface LogEntry {
 interface Stats {
   live:    { online: number; queue: number; rooms: number; log: LogEntry[] }
   today:   { signups: number; revenue: number; boosts: number }
+  week:    { revenue: number; boosts: number }
+  month:   { revenue: number; boosts: number }
   alltime: { users: number; revenue: number; boosts: number }
+  plans:   Record<string, { count: number; revenue: number }>
 }
 
 function timeAgo(ts: number) {
@@ -34,21 +37,14 @@ function countryFlag(code?: string) {
   ).join('')
 }
 
-function fmt(n: number) {
-  return n.toLocaleString('en-US')
-}
-
-function fmtMoney(n: number) {
-  return '$' + n.toFixed(2)
-}
-
+function fmt(n: number) { return n.toLocaleString('en-US') }
+function fmtMoney(n: number) { return '$' + n.toFixed(2) }
 function fmtDate(ts: number) {
   return new Date(ts).toLocaleString('en-US', {
     month: 'short', day: 'numeric',
     hour: '2-digit', minute: '2-digit', hour12: false,
   })
 }
-
 function fmtDuration(secs?: number) {
   if (secs === undefined) return '—'
   if (secs < 60) return `${secs}s`
@@ -83,12 +79,28 @@ function Card({ title, dot, children }: { title: string; dot?: string; children:
   )
 }
 
+function SectionHeader({ dot, title, right }: { dot: string; title: string; right?: string }) {
+  return (
+    <div className="px-5 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #1e1e1e' }}>
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: dot, boxShadow: `0 0 5px ${dot}` }} />
+      <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#444' }}>{title}</span>
+      {right && <span className="text-xs ml-auto" style={{ color: '#333' }}>{right}</span>}
+    </div>
+  )
+}
+
+const PLAN_LABELS: Record<string, string> = {
+  '10min': '10 min — $2.99',
+  '30min': '30 min — $7.99',
+  '60min': '1 h — $14.99',
+}
+
 export default function Dashboard() {
-  const router  = useRouter()
-  const [stats, setStats]     = useState<Stats | null>(null)
-  const [error, setError]     = useState('')
+  const router = useRouter()
+  const [stats, setStats]   = useState<Stats | null>(null)
+  const [error, setError]   = useState('')
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
-  const [tick, setTick]       = useState(0) // drives "X sec ago" re-render
+  const [tick, setTick]     = useState(0)
 
   const fetchStats = useCallback(async () => {
     const res = await fetch('/api/cockpit/stats')
@@ -99,18 +111,62 @@ export default function Dashboard() {
     setError('')
   }, [router])
 
-  // Poll every 5s
   useEffect(() => {
     fetchStats()
     const id = setInterval(fetchStats, 5000)
     return () => clearInterval(id)
   }, [fetchStats])
 
-  // "X sec ago" ticker
   useEffect(() => {
     const id = setInterval(() => setTick(t => t + 1), 1000)
     return () => clearInterval(id)
   }, [])
+
+  // ── Computed from log ──────────────────────────────────
+  const computed = useMemo(() => {
+    const log = stats?.live.log ?? []
+
+    // Avg duration
+    const withDur = log.filter(e => e.duration !== undefined) as (LogEntry & { duration: number })[]
+    const avgDuration = withDur.length > 0
+      ? Math.round(withDur.reduce((s, e) => s + e.duration, 0) / withDur.length)
+      : undefined
+
+    // Top countries
+    const countryCounts: Record<string, number> = {}
+    for (const e of log) {
+      if (e.country) countryCounts[e.country] = (countryCounts[e.country] ?? 0) + 1
+    }
+    const topCountries = Object.entries(countryCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+
+    // Gender split
+    const genderCounts: Record<string, number> = { M: 0, F: 0, O: 0 }
+    for (const e of log) {
+      if (e.gender && e.gender in genderCounts) genderCounts[e.gender]++
+    }
+    const genderTotal = genderCounts.M + genderCounts.F + genderCounts.O
+
+    // Top interests
+    const interestCounts: Record<string, number> = {}
+    for (const e of log) {
+      for (const i of e.interests) {
+        const k = i.toLowerCase()
+        interestCounts[k] = (interestCounts[k] ?? 0) + 1
+      }
+    }
+    const topInterests = Object.entries(interestCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+
+    // Conversion rate
+    const convRate = stats && stats.alltime.users > 0
+      ? ((stats.alltime.boosts / stats.alltime.users) * 100).toFixed(1)
+      : null
+
+    return { avgDuration, topCountries, genderCounts, genderTotal, topInterests, convRate }
+  }, [stats])
 
   async function logout() {
     await fetch('/api/cockpit/auth', { method: 'DELETE' })
@@ -138,22 +194,16 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-4">
           <span className="text-xs" style={{ color: '#444' }}>
-            {/* suppress tick warning — it drives re-render */}
-            {void tick}
-            Updated {lastStr}
+            {void tick}Updated {lastStr}
           </span>
-          <button
-            onClick={fetchStats}
+          <button onClick={fetchStats}
             className="text-xs px-3 py-1.5 rounded-lg transition-all hover:opacity-70"
-            style={{ background: '#1a1a1a', color: '#666', border: '1px solid #272727' }}
-          >
+            style={{ background: '#1a1a1a', color: '#666', border: '1px solid #272727' }}>
             Refresh
           </button>
-          <button
-            onClick={logout}
+          <button onClick={logout}
             className="text-xs px-3 py-1.5 rounded-lg transition-all hover:opacity-70"
-            style={{ background: '#1a1a1a', color: '#666', border: '1px solid #272727' }}
-          >
+            style={{ background: '#1a1a1a', color: '#666', border: '1px solid #272727' }}>
             Logout
           </button>
         </div>
@@ -165,58 +215,169 @@ export default function Dashboard() {
         </p>
       )}
 
-      {/* 3-column grid */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+      {/* Row 1 — Live / Today / Week / Month / All time */}
+      <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}>
 
-        {/* Live */}
         <Card title="Live" dot="#3beea8">
           <StatRow label="Online"       value={stats ? fmt(stats.live.online) : '…'} accent="#3beea8" />
           <StatRow label="In queue"     value={stats ? fmt(stats.live.queue)  : '…'} />
           <StatRow label="Active chats" value={stats ? fmt(stats.live.rooms)  : '…'} />
+          <StatRow
+            label="Avg chat duration"
+            value={computed.avgDuration !== undefined ? fmtDuration(computed.avgDuration) : '—'}
+          />
         </Card>
 
-        {/* Today */}
         <Card title="Today">
           <StatRow label="New signups" value={stats ? `+${fmt(stats.today.signups)}` : '…'} accent="#ffd53a" />
           <StatRow label="Revenue"     value={stats ? fmtMoney(stats.today.revenue)  : '…'} accent="#ffd53a" />
           <StatRow label="Boosts sold" value={stats ? fmt(stats.today.boosts)        : '…'} />
         </Card>
 
-        {/* All time */}
+        <Card title="This week">
+          <StatRow label="Revenue"     value={stats ? fmtMoney(stats.week.revenue) : '…'} accent="#7c61ff" />
+          <StatRow label="Boosts sold" value={stats ? fmt(stats.week.boosts)       : '…'} />
+        </Card>
+
+        <Card title="This month">
+          <StatRow label="Revenue"     value={stats ? fmtMoney(stats.month.revenue) : '…'} accent="#ff66b3" />
+          <StatRow label="Boosts sold" value={stats ? fmt(stats.month.boosts)       : '…'} />
+        </Card>
+
         <Card title="All time">
-          <StatRow label="Total users"   value={stats ? fmt(stats.alltime.users)         : '…'} />
-          <StatRow label="Total revenue" value={stats ? fmtMoney(stats.alltime.revenue)  : '…'} accent="#ff66b3" />
-          <StatRow label="Total boosts"  value={stats ? fmt(stats.alltime.boosts)        : '…'} />
+          <StatRow label="Total users"      value={stats ? fmt(stats.alltime.users)        : '…'} />
+          <StatRow label="Total revenue"    value={stats ? fmtMoney(stats.alltime.revenue) : '…'} accent="#ff66b3" />
+          <StatRow label="Total boosts"     value={stats ? fmt(stats.alltime.boosts)       : '…'} />
+          <StatRow
+            label="Signup → boost"
+            value={computed.convRate !== null ? `${computed.convRate}%` : '—'}
+            accent="#3aff43"
+          />
         </Card>
 
       </div>
 
-      {/* Live globe */}
-      <div className="mt-4 rounded-2xl overflow-hidden" style={{ background: '#111', border: '1px solid #1e1e1e' }}>
-        <div className="px-5 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #1e1e1e' }}>
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#ffd53a', boxShadow: '0 0 5px #ffd53a' }} />
-          <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#444' }}>
-            Live visitors map
-          </span>
-          <span className="text-xs ml-auto" style={{ color: '#333' }}>
-            {stats ? `${stats.live.log.filter(e => e.country).length} located` : '…'}
-          </span>
+      {/* Row 2 — Top countries / Gender / Top interests */}
+      <div className="grid gap-4 mb-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+
+        {/* Top countries */}
+        <div className="rounded-2xl overflow-hidden" style={{ background: '#111', border: '1px solid #1e1e1e' }}>
+          <SectionHeader dot="#ffd53a" title="Top countries" right="last 200 connections" />
+          <div className="p-5">
+            {computed.topCountries.length === 0
+              ? <p className="text-xs" style={{ color: '#333' }}>No data yet</p>
+              : computed.topCountries.map(([country, count]) => {
+                  const max = computed.topCountries[0][1]
+                  const pct = Math.round((count / max) * 100)
+                  return (
+                    <div key={country} className="mb-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm" style={{ color: '#888' }}>
+                          {countryFlag(country)} {country}
+                        </span>
+                        <span className="text-sm font-bold tabular-nums" style={{ color: 'white' }}>{count}</span>
+                      </div>
+                      <div className="h-1 rounded-full" style={{ background: '#1e1e1e' }}>
+                        <div className="h-1 rounded-full" style={{ width: `${pct}%`, background: '#ffd53a' }} />
+                      </div>
+                    </div>
+                  )
+                })
+            }
+          </div>
         </div>
+
+        {/* Gender split */}
+        <div className="rounded-2xl overflow-hidden" style={{ background: '#111', border: '1px solid #1e1e1e' }}>
+          <SectionHeader dot="#ff66b3" title="Gender split" right="last 200 connections" />
+          <div className="p-5">
+            {computed.genderTotal === 0
+              ? <p className="text-xs" style={{ color: '#333' }}>No data yet</p>
+              : (['M', 'F', 'O'] as const).map(g => {
+                  const count = computed.genderCounts[g]
+                  const pct   = computed.genderTotal > 0 ? ((count / computed.genderTotal) * 100).toFixed(0) : '0'
+                  const labels = { M: 'Man', F: 'Woman', O: 'Other' }
+                  const colors = { M: '#7c61ff', F: '#ff66b3', O: '#888' }
+                  return (
+                    <div key={g} className="mb-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm" style={{ color: '#888' }}>{labels[g]}</span>
+                        <span className="text-sm font-bold tabular-nums" style={{ color: 'white' }}>
+                          {count} <span style={{ color: '#444', fontWeight: 400 }}>({pct}%)</span>
+                        </span>
+                      </div>
+                      <div className="h-1 rounded-full" style={{ background: '#1e1e1e' }}>
+                        <div className="h-1 rounded-full" style={{ width: `${pct}%`, background: colors[g] }} />
+                      </div>
+                    </div>
+                  )
+                })
+            }
+          </div>
+        </div>
+
+        {/* Top interests */}
+        <div className="rounded-2xl overflow-hidden" style={{ background: '#111', border: '1px solid #1e1e1e' }}>
+          <SectionHeader dot="#3aff43" title="Top interests" right="last 200 connections" />
+          <div className="p-5">
+            {computed.topInterests.length === 0
+              ? <p className="text-xs" style={{ color: '#333' }}>No data yet</p>
+              : (
+                <div className="flex flex-wrap gap-2">
+                  {computed.topInterests.map(([interest, count]) => (
+                    <span key={interest}
+                      className="text-xs px-2.5 py-1 rounded-full flex items-center gap-1.5"
+                      style={{ background: '#1a1a1a', border: '1px solid #272727', color: '#888' }}>
+                      {interest}
+                      <span style={{ color: '#3aff43', fontWeight: 700 }}>{count}</span>
+                    </span>
+                  ))}
+                </div>
+              )
+            }
+          </div>
+        </div>
+
+      </div>
+
+      {/* Plan breakdown */}
+      {stats && Object.keys(stats.plans).length > 0 && (
+        <div className="mb-4 rounded-2xl overflow-hidden" style={{ background: '#111', border: '1px solid #1e1e1e' }}>
+          <SectionHeader dot="#ff66b3" title="Boost plan breakdown" />
+          <div className="grid gap-px" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', background: '#1e1e1e' }}>
+            {['10min', '30min', '60min'].map(plan => {
+              const d = stats.plans[plan]
+              return (
+                <div key={plan} className="p-5" style={{ background: '#111' }}>
+                  <p className="text-xs mb-3" style={{ color: '#444' }}>{PLAN_LABELS[plan] ?? plan}</p>
+                  <p className="text-2xl font-bold tabular-nums" style={{ color: 'white' }}>
+                    {d ? fmt(d.count) : '0'}
+                  </p>
+                  <p className="text-sm mt-1" style={{ color: '#ff66b3' }}>
+                    {d ? fmtMoney(d.revenue) : '$0.00'}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Live globe */}
+      <div className="mb-4 rounded-2xl overflow-hidden" style={{ background: '#111', border: '1px solid #1e1e1e' }}>
+        <SectionHeader
+          dot="#ffd53a"
+          title="Live visitors map"
+          right={stats ? `${stats.live.log.filter(e => e.country).length} located` : '…'}
+        />
         <LiveGlobe log={stats?.live.log ?? []} />
       </div>
 
       {/* Recent connections */}
-      <div className="mt-4 rounded-2xl overflow-hidden" style={{ background: '#111', border: '1px solid #1e1e1e' }}>
-        <div className="px-5 py-3 flex items-center gap-2" style={{ borderBottom: '1px solid #1e1e1e' }}>
-          <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#3beea8', boxShadow: '0 0 5px #3beea8' }} />
-          <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#444' }}>
-            Recent connections
-          </span>
-          <span className="text-xs ml-auto" style={{ color: '#333' }}>last 100</span>
-        </div>
+      <div className="rounded-2xl overflow-hidden" style={{ background: '#111', border: '1px solid #1e1e1e' }}>
+        <SectionHeader dot="#3beea8" title="Recent connections" right="last 100" />
 
         {(() => {
-          // Deduplicate by IP — keep most recent entry per IP (log is ordered newest first)
           const seen = new Set<string>()
           const uniqueLog: LogEntry[] = []
           for (const entry of (stats?.live.log ?? [])) {
@@ -261,7 +422,8 @@ export default function Dashboard() {
                       <td className="px-5 py-2.5 text-xs" style={{ color: '#555' }}>
                         {entry.gender ?? '—'}
                       </td>
-                      <td className="px-5 py-2.5 text-xs tabular-nums" style={{ color: entry.duration ? '#3beea8' : '#333', whiteSpace: 'nowrap' }}>
+                      <td className="px-5 py-2.5 text-xs tabular-nums"
+                        style={{ color: entry.duration ? '#3beea8' : '#333', whiteSpace: 'nowrap' }}>
                         {fmtDuration(entry.duration)}
                       </td>
                       <td className="px-5 py-2.5 text-xs" style={{ color: '#555' }}>
@@ -275,24 +437,6 @@ export default function Dashboard() {
           )
         })()}
       </div>
-
-      {/* Boost breakdown */}
-      {stats && stats.alltime.boosts > 0 && (
-        <div className="mt-4 rounded-2xl p-5" style={{ background: '#111', border: '1px solid #1e1e1e' }}>
-          <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#444' }}>
-            Revenue breakdown (all time)
-          </span>
-          <div className="mt-2 flex gap-6 flex-wrap">
-            {[
-              { label: '10 min — $2.99', key: '10min' },
-              { label: '30 min — $7.99', key: '30min' },
-              { label: '1h     — $14.99', key: '60min' },
-            ].map(({ label }) => (
-              <span key={label} className="text-xs" style={{ color: '#555' }}>{label}</span>
-            ))}
-          </div>
-        </div>
-      )}
 
     </div>
   )
