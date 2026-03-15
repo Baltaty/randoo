@@ -38,6 +38,9 @@ function AuthForm() {
         options: { data: { gender } },
       })
       if (error) { setError(error.message); setLoading(false); return }
+      if (typeof window !== 'undefined' && (window as any).fbq) {
+        (window as any).fbq('track', 'CompleteRegistration')
+      }
       router.push(next)
       router.refresh()
     } else {

@@ -35,6 +35,10 @@ function SuccessContent() {
         const data = await res.json()
 
         if (data.ready) {
+          // Track purchase conversion
+          if (typeof window !== 'undefined' && (window as any).fbq) {
+            (window as any).fbq('track', 'Purchase', { currency: 'USD' })
+          }
           // Persist boost in localStorage so it survives navigation
           localStorage.setItem('randoo-boost', JSON.stringify({
             token:      data.token,
