@@ -14,12 +14,13 @@ interface LogEntry {
 }
 
 interface Stats {
-  live:    { online: number; queue: number; rooms: number; log: LogEntry[] }
-  today:   { signups: number; revenue: number; boosts: number }
-  week:    { revenue: number; boosts: number }
-  month:   { revenue: number; boosts: number }
-  alltime: { users: number; revenue: number; boosts: number }
-  plans:   Record<string, { count: number; revenue: number }>
+  live:      { online: number; queue: number; rooms: number; log: LogEntry[] }
+  today:     { signups: number; revenue: number; boosts: number }
+  week:      { revenue: number; boosts: number }
+  month:     { revenue: number; boosts: number }
+  alltime:   { users: number; revenue: number; boosts: number }
+  plans:     Record<string, { count: number; revenue: number }>
+  returning: { ip: string; sessions: number; country?: string }[]
 }
 
 function timeAgo(ts: number) {
@@ -359,6 +360,41 @@ export default function Dashboard() {
                 </div>
               )
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Returning visitors */}
+      {stats && stats.returning.length > 0 && (
+        <div className="mb-4 rounded-2xl overflow-hidden" style={{ background: '#111', border: '1px solid #1e1e1e' }}>
+          <SectionHeader dot="#3aff43" title="Returning visitors" right="≥ 2 sessions, all-time" />
+          <div style={{ overflowY: 'auto', maxHeight: 320 }}>
+            <table className="w-full text-sm">
+              <thead>
+                <tr style={{ borderBottom: '1px solid #1a1a1a' }}>
+                  {['#', 'IP', 'Country', 'Sessions'].map(h => (
+                    <th key={h} className="text-left px-5 py-2 text-xs font-semibold"
+                      style={{ color: '#333', whiteSpace: 'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {stats.returning.map((v, i) => (
+                  <tr key={v.ip} style={{ borderBottom: '1px solid #141414' }}
+                    className="transition-colors hover:bg-white/[0.02]">
+                    <td className="px-5 py-2.5 text-xs tabular-nums" style={{ color: '#333' }}>{i + 1}</td>
+                    <td className="px-5 py-2.5 text-xs font-mono" style={{ color: '#555' }}>{v.ip}</td>
+                    <td className="px-5 py-2.5 text-xs" style={{ whiteSpace: 'nowrap' }}>
+                      <span className="mr-1.5">{countryFlag(v.country)}</span>
+                      <span style={{ color: '#666' }}>{v.country ?? '—'}</span>
+                    </td>
+                    <td className="px-5 py-2.5 text-sm font-bold tabular-nums" style={{ color: '#3aff43' }}>
+                      {v.sessions}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

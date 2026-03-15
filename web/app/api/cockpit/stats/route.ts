@@ -102,6 +102,30 @@ export async function GET(req: NextRequest) {
     }
   } catch { /* fallback to empty */ }
 
+  // ── Returning visitors (all-time, grouped by IP) ──────
+  let returning: { ip: string; sessions: number; country?: string }[] = []
+  try {
+    const sbUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+    const res = await fetch(
+      `${sbUrl}/rest/v1/connection_logs?select=ip,country&ip=not.is.null`,
+      { headers: { apikey: sbKey, Authorization: `Bearer ${sbKey}` }, cache: 'no-store' }
+    )
+    if (res.ok) {
+      const rows = await res.json() as Array<{ ip: string; country: string | null }>
+      const ipMap: Record<string, { sessions: number; country?: string }> = {}
+      for (const r of rows) {
+        if (!ipMap[r.ip]) ipMap[r.ip] = { sessions: 0, country: r.country ?? undefined }
+        ipMap[r.ip].sessions++
+      }
+      returning = Object.entries(ipMap)
+        .filter(([, v]) => v.sessions >= 2)
+        .sort((a, b) => b[1].sessions - a[1].sessions)
+        .slice(0, 10)
+        .map(([ip, v]) => ({ ip, sessions: v.sessions, country: v.country }))
+    }
+  } catch { /* ignore */ }
+
   return NextResponse.json({
     live: {
       online: live.clients,
@@ -128,5 +152,6 @@ export async function GET(req: NextRequest) {
       boosts:  totalBoosts,
     },
     plans,
+    returning,
   })
 }
