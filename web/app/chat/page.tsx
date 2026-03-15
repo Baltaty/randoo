@@ -196,6 +196,10 @@ function ChatContent() {
   // Settings modal
   const [showSettingsModal, setShowSettingsModal] = useState(false)
 
+  // Boost upsell after 10 next-clicks
+  const nextCountRef = useRef(0)
+  const [showBoostUpsell, setShowBoostUpsell] = useState(false)
+
   // Device controls
   const [showDeviceMenu, setShowDeviceMenu]   = useState(false)
   const [showDevicesModal, setShowDevicesModal] = useState(false)
@@ -306,6 +310,14 @@ function ChatContent() {
     if (roomIdRef.current) socket.emit('next', { roomId: roomIdRef.current })
     webrtc.closePeerConnection()
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
+
+    // Show boost upsell after 10 next-clicks (only if no boost active)
+    nextCountRef.current++
+    if (nextCountRef.current >= 10 && !boostRef.current) {
+      setShowBoostUpsell(true)
+      nextCountRef.current = 0
+    }
+
     joinQueue()
   }, [joinQueue]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -869,6 +881,49 @@ function ChatContent() {
             </button>
           </div>
           <SettingsContent />
+        </div>
+      </div>
+    )}
+
+    {/* Boost upsell modal */}
+    {showBoostUpsell && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center px-4"
+        style={{ background: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(8px)' }}
+      >
+        <div className="w-full max-w-sm rounded-3xl p-7 flex flex-col items-center text-center"
+          style={{ background: '#111', border: '1px solid #272727' }}>
+
+          {/* Icon */}
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-5"
+            style={{ background: 'var(--theme-accent)' }}>
+            <svg width="26" height="26" viewBox="0 0 44 52" fill="var(--theme-btn-fg)">
+              <path d="M26 0L0 30H18L18 52L44 22H26L26 0Z"/>
+            </svg>
+          </div>
+
+          <h2 className="text-white font-bold text-xl mb-2 leading-tight">
+            Having trouble finding someone?
+          </h2>
+          <p className="text-sm mb-7 leading-relaxed" style={{ color: '#666' }}>
+            Boost your profile to skip the queue and match faster — choose who you want to meet.
+          </p>
+
+          <button
+            onClick={() => { setShowBoostUpsell(false); router.push('/boost') }}
+            className="w-full py-4 rounded-2xl font-bold text-base transition-all hover:brightness-90 active:scale-95 mb-3"
+            style={{ background: 'var(--theme-accent)', color: 'var(--theme-btn-fg)' }}
+          >
+            Get Boost
+          </button>
+
+          <button
+            onClick={() => setShowBoostUpsell(false)}
+            className="w-full py-3 rounded-2xl font-semibold text-sm transition-all hover:opacity-70"
+            style={{ background: 'transparent', color: '#555' }}
+          >
+            Continue without boost
+          </button>
         </div>
       </div>
     )}
