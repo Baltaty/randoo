@@ -932,10 +932,10 @@ function ChatContent() {
           </div>
 
           <h2 className="text-white font-bold text-xl mb-2 leading-tight">
-            Having trouble finding someone?
+            {t('chat.upsell.title')}
           </h2>
           <p className="text-sm mb-7 leading-relaxed" style={{ color: '#666' }}>
-            Boost your profile to skip the queue and match faster — choose who you want to meet.
+            {t('chat.upsell.desc')}
           </p>
 
           <button
@@ -943,7 +943,7 @@ function ChatContent() {
             className="w-full py-4 rounded-2xl font-bold text-base transition-all hover:brightness-90 active:scale-95 mb-3"
             style={{ background: 'var(--theme-accent)', color: 'var(--theme-btn-fg)' }}
           >
-            Get Boost
+            {t('chat.upsell.cta')}
           </button>
 
           <button
@@ -951,7 +951,7 @@ function ChatContent() {
             className="w-full py-3 rounded-2xl font-semibold text-sm transition-all hover:opacity-70"
             style={{ background: 'transparent', color: '#555' }}
           >
-            Continue without boost
+            {t('chat.upsell.dismiss')}
           </button>
         </div>
       </div>

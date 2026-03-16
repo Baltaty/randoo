@@ -38,6 +38,12 @@ const en: Dict = {
   'chat.boost':            'Boost',
   'chat.online':           '{n}+ online',
 
+  // ── Boost upsell ─────────────────────────────
+  'chat.upsell.title':   'Having trouble finding someone?',
+  'chat.upsell.desc':    'Boost your profile to skip the queue and match faster — choose who you want to meet.',
+  'chat.upsell.cta':     'Get Boost',
+  'chat.upsell.dismiss': 'Continue without boost',
+
   // ── Report ───────────────────────────────────
   'chat.report':                   'Report',
   'chat.report.title':             'Report User',
@@ -155,6 +161,12 @@ const fr: Dict = {
   'chat.new':              'New',
   'chat.boost':            'Boost',
   'chat.online':           '{n}+ en ligne',
+
+  // ── Boost upsell ─────────────────────────────
+  'chat.upsell.title':   'Tu as du mal à trouver quelqu\'un ?',
+  'chat.upsell.desc':    'Booste ton profil pour passer la file d\'attente et matcher plus vite — choisis qui tu veux rencontrer.',
+  'chat.upsell.cta':     'Obtenir le Boost',
+  'chat.upsell.dismiss': 'Continuer sans boost',
 
   // ── Report ───────────────────────────────────
   'chat.report':                   'Signaler',
