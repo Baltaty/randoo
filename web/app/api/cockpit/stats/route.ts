@@ -77,7 +77,7 @@ export async function GET(req: NextRequest) {
   }[] = []
   try {
     const res = await fetch(
-      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/connection_logs?select=ts,ip,country,gender,interests,duration,referrer&order=ts.desc&limit=200`,
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/connection_logs?select=ts,ip,country,gender,interests,duration,referrer,device_type,os,screen&order=ts.desc&limit=200`,
       {
         headers: {
           apikey:        process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -88,17 +88,21 @@ export async function GET(req: NextRequest) {
     )
     if (res.ok) {
       const rows = await res.json() as Array<{
-        ts: number; ip: string | null; country: string | null
-        gender: string | null; interests: string[]; duration: number | null; referrer: string | null
+        ts: number; ip: string | null; country: string | null; gender: string | null
+        interests: string[]; duration: number | null; referrer: string | null
+        device_type: string | null; os: string | null; screen: string | null
       }>
       connectionLog = rows.map(r => ({
-        ts:        r.ts,
-        ip:        r.ip        ?? undefined,
-        country:   r.country   ?? undefined,
-        gender:    r.gender    ?? undefined,
-        interests: r.interests ?? [],
-        duration:  r.duration  ?? undefined,
-        referrer:  r.referrer  ?? undefined,
+        ts:          r.ts,
+        ip:          r.ip          ?? undefined,
+        country:     r.country     ?? undefined,
+        gender:      r.gender      ?? undefined,
+        interests:   r.interests   ?? [],
+        duration:    r.duration    ?? undefined,
+        referrer:    r.referrer    ?? undefined,
+        device_type: r.device_type ?? undefined,
+        os:          r.os          ?? undefined,
+        screen:      r.screen      ?? undefined,
       }))
     }
   } catch { /* fallback to empty */ }

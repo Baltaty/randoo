@@ -52,6 +52,9 @@ interface LogEntry {
   gender?:     string
   interests:   string[]
   referrer?:   string
+  device_type?: string
+  os?:         string
+  screen?:     string
   matchedAt?:  number   // epoch ms when matched
   duration?:   number   // seconds of conversation
   supabaseId?: string   // uuid of the row in connection_logs
@@ -82,12 +85,15 @@ async function sbInsertLog(entry: LogEntry): Promise<void> {
         Prefer: 'return=representation',
       },
       body: JSON.stringify({
-        ts:        entry.ts,
-        ip:        entry.ip        ?? null,
-        country:   entry.country   ?? null,
-        gender:    entry.gender    ?? null,
-        interests: entry.interests,
-        referrer:  entry.referrer  ?? null,
+        ts:          entry.ts,
+        ip:          entry.ip          ?? null,
+        country:     entry.country     ?? null,
+        gender:      entry.gender      ?? null,
+        interests:   entry.interests,
+        referrer:    entry.referrer    ?? null,
+        device_type: entry.device_type ?? null,
+        os:          entry.os          ?? null,
+        screen:      entry.screen      ?? null,
       }),
     })
     if (res.ok) {
@@ -294,13 +300,16 @@ export function setupMatchmaking(io: Server) {
       sessionId?:   string
       gender?:      string
       wantGender?:  string
-      boostToken?:  string
-      countries?:   string[]
-      interests?:   string[]
-      maxWait?:     number
-      privacyMode?: boolean
-      isBot?:       boolean
-      referrer?:    string
+      boostToken?:   string
+      countries?:    string[]
+      interests?:    string[]
+      maxWait?:      number
+      privacyMode?:  boolean
+      isBot?:        boolean
+      referrer?:     string
+      device_type?:  string
+      os?:           string
+      screen?:       string
     }) => {
       removeFromQueue(socket.id)
       clearTimer(socket.id)
@@ -321,12 +330,15 @@ export function setupMatchmaking(io: Server) {
 
       const ip = resolveIP(socket)
       const logEntry: LogEntry = {
-        ts:        Date.now(),
+        ts:          Date.now(),
         ip,
-        country:   data.privacyMode ? undefined : geoip.lookup(ip ?? '')?.country ?? undefined,
-        gender:    data.gender,
-        interests: Array.isArray(data.interests) ? data.interests.slice(0, 5) : [],
-        referrer:  typeof data.referrer === 'string' && data.referrer ? data.referrer : undefined,
+        country:     data.privacyMode ? undefined : geoip.lookup(ip ?? '')?.country ?? undefined,
+        gender:      data.gender,
+        interests:   Array.isArray(data.interests) ? data.interests.slice(0, 5) : [],
+        referrer:    typeof data.referrer    === 'string' && data.referrer    ? data.referrer    : undefined,
+        device_type: typeof data.device_type === 'string' && data.device_type ? data.device_type : undefined,
+        os:          typeof data.os          === 'string' && data.os          ? data.os          : undefined,
+        screen:      typeof data.screen      === 'string' && data.screen      ? data.screen      : undefined,
       }
       if (!data.isBot) {
         addLog(logEntry)

@@ -146,6 +146,26 @@ function CamIcon({ off }: { off: boolean }) {
   )
 }
 
+// ── Device info ──────────────────────────────
+
+function getDeviceInfo(): { device_type: string; os: string; screen: string } {
+  const ua = navigator.userAgent
+  let os = 'Unknown'
+  if (/Windows/i.test(ua))          os = 'Windows'
+  else if (/Android/i.test(ua))     os = 'Android'
+  else if (/iPhone|iPad|iPod/i.test(ua)) os = 'iOS'
+  else if (/Mac OS X/i.test(ua))    os = 'macOS'
+  else if (/CrOS/i.test(ua))        os = 'ChromeOS'
+  else if (/Linux/i.test(ua))       os = 'Linux'
+
+  let device_type = 'desktop'
+  if (/Mobi|Android|iPhone|iPod/i.test(ua))  device_type = 'mobile'
+  else if (/iPad|Tablet/i.test(ua))           device_type = 'tablet'
+
+  const screen = `${window.screen.width}x${window.screen.height}`
+  return { device_type, os, screen }
+}
+
 // ── Main chat component ──────────────────────
 
 function ChatContent() {
@@ -301,6 +321,7 @@ function ChatContent() {
       interests:   interestsRef.current,
       isBot,
       referrer:    typeof document !== 'undefined' ? (document.referrer || undefined) : undefined,
+      ...( typeof window !== 'undefined' ? getDeviceInfo() : {} ),
     })
   }, [urlWantGender, urlBoostToken])
 

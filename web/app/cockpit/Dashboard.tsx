@@ -5,13 +5,16 @@ import { useRouter } from 'next/navigation'
 import LiveGlobe from './LiveGlobe'
 
 interface LogEntry {
-  ts:         number
-  ip?:        string
-  country?:   string
-  gender?:    string
-  interests:  string[]
-  duration?:  number
-  referrer?:  string
+  ts:          number
+  ip?:         string
+  country?:    string
+  gender?:     string
+  interests:   string[]
+  duration?:   number
+  referrer?:   string
+  device_type?: string
+  os?:         string
+  screen?:     string
 }
 
 interface Stats {
@@ -426,7 +429,7 @@ export default function Dashboard() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ borderBottom: '1px solid #1a1a1a' }}>
-                    {['Date', 'Time ago', 'Country', 'IP', 'Gender', 'Duration', 'Referrer', 'Interests'].map(h => (
+                    {['Date', 'Time ago', 'Country', 'IP', 'Gender', 'Duration', 'Device', 'OS', 'Screen', 'Referrer', 'Interests'].map(h => (
                       <th key={h} className="text-left px-5 py-2 text-xs font-semibold"
                         style={{ color: '#333', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
@@ -463,7 +466,16 @@ export default function Dashboard() {
                         style={{ color: entry.duration ? '#3beea8' : '#333', whiteSpace: 'nowrap' }}>
                         {fmtDuration(entry.duration)}
                       </td>
-                      <td className="px-5 py-2.5 text-xs font-mono" style={{ color: '#555', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <td className="px-5 py-2.5 text-xs" style={{ color: '#555', whiteSpace: 'nowrap' }}>
+                        {entry.device_type ?? '—'}
+                      </td>
+                      <td className="px-5 py-2.5 text-xs" style={{ color: '#555', whiteSpace: 'nowrap' }}>
+                        {entry.os ?? '—'}
+                      </td>
+                      <td className="px-5 py-2.5 text-xs font-mono" style={{ color: '#555', whiteSpace: 'nowrap' }}>
+                        {entry.screen ?? '—'}
+                      </td>
+                      <td className="px-5 py-2.5 text-xs font-mono" style={{ color: '#555', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {entry.referrer ? (() => { try { return new URL(entry.referrer).hostname } catch { return entry.referrer } })() : '—'}
                       </td>
                       <td className="px-5 py-2.5 text-xs" style={{ color: '#555' }}>
