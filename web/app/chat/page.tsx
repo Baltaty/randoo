@@ -300,6 +300,7 @@ function ChatContent() {
       maxWait:     s.maxWait,
       interests:   interestsRef.current,
       isBot,
+      referrer:    typeof document !== 'undefined' ? (document.referrer || undefined) : undefined,
     })
   }, [urlWantGender, urlBoostToken])
 

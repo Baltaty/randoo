@@ -11,6 +11,7 @@ interface LogEntry {
   gender?:    string
   interests:  string[]
   duration?:  number
+  referrer?:  string
 }
 
 interface Stats {
@@ -425,7 +426,7 @@ export default function Dashboard() {
               <table className="w-full text-sm">
                 <thead>
                   <tr style={{ borderBottom: '1px solid #1a1a1a' }}>
-                    {['Date', 'Time ago', 'Country', 'IP', 'Gender', 'Duration', 'Interests'].map(h => (
+                    {['Date', 'Time ago', 'Country', 'IP', 'Gender', 'Duration', 'Referrer', 'Interests'].map(h => (
                       <th key={h} className="text-left px-5 py-2 text-xs font-semibold"
                         style={{ color: '#333', whiteSpace: 'nowrap' }}>{h}</th>
                     ))}
@@ -461,6 +462,9 @@ export default function Dashboard() {
                       <td className="px-5 py-2.5 text-xs tabular-nums"
                         style={{ color: entry.duration ? '#3beea8' : '#333', whiteSpace: 'nowrap' }}>
                         {fmtDuration(entry.duration)}
+                      </td>
+                      <td className="px-5 py-2.5 text-xs font-mono" style={{ color: '#555', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {entry.referrer ? (() => { try { return new URL(entry.referrer).hostname } catch { return entry.referrer } })() : '—'}
                       </td>
                       <td className="px-5 py-2.5 text-xs" style={{ color: '#555' }}>
                         {entry.interests.length > 0 ? entry.interests.join(', ') : '—'}

@@ -51,6 +51,7 @@ interface LogEntry {
   country?:    string
   gender?:     string
   interests:   string[]
+  referrer?:   string
   matchedAt?:  number   // epoch ms when matched
   duration?:   number   // seconds of conversation
   supabaseId?: string   // uuid of the row in connection_logs
@@ -86,6 +87,7 @@ async function sbInsertLog(entry: LogEntry): Promise<void> {
         country:   entry.country   ?? null,
         gender:    entry.gender    ?? null,
         interests: entry.interests,
+        referrer:  entry.referrer  ?? null,
       }),
     })
     if (res.ok) {
@@ -298,6 +300,7 @@ export function setupMatchmaking(io: Server) {
       maxWait?:     number
       privacyMode?: boolean
       isBot?:       boolean
+      referrer?:    string
     }) => {
       removeFromQueue(socket.id)
       clearTimer(socket.id)
@@ -323,6 +326,7 @@ export function setupMatchmaking(io: Server) {
         country:   data.privacyMode ? undefined : geoip.lookup(ip ?? '')?.country ?? undefined,
         gender:    data.gender,
         interests: Array.isArray(data.interests) ? data.interests.slice(0, 5) : [],
+        referrer:  typeof data.referrer === 'string' && data.referrer ? data.referrer : undefined,
       }
       if (!data.isBot) {
         addLog(logEntry)
