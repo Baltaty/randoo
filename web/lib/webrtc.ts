@@ -1,6 +1,7 @@
-const ICE_SERVERS: RTCIceServer[] = [
+// Fallback when the server doesn't provide TURN credentials (STUN only — no relay)
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
+  { urls: 'stun:stun.cloudflare.com:3478' },
   { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
 ]
 
 const VIDEO_CONSTRAINTS: MediaTrackConstraints = { width: { ideal: 1280 }, height: { ideal: 720 } }
@@ -76,10 +77,13 @@ export class WebRTCManager {
     return this.localStream?.getAudioTracks()[0]?.getSettings().deviceId
   }
 
-  createPeerConnection(cb: PeerCallbacks): RTCPeerConnection {
+  /** `iceServers` comes from the server's `matched` event (Cloudflare TURN credentials). */
+  createPeerConnection(cb: PeerCallbacks, iceServers?: RTCIceServer[]): RTCPeerConnection {
     // Close any existing connection before creating a new one
     this.closePeerConnection()
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
+    const pc = new RTCPeerConnection({
+      iceServers: iceServers?.length ? iceServers : DEFAULT_ICE_SERVERS,
+    })
     this.pc = pc
 
     // Add local tracks. If camera/mic is missing, still negotiate a receive-only

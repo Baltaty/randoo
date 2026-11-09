@@ -4,6 +4,7 @@ import {
   Gender, LogEntry,
   verifyBoostToken, sbInsertLog, sbUpdateDuration, sbInsertReport,
 } from './supabase'
+import { getIceServers } from './turn'
 
 interface UserInfo {
   socketId:    string
@@ -189,10 +190,12 @@ function createRoom(a: UserInfo, b: UserInfo, io: Server) {
   socketRoom.set(b.socketId, roomId)
 
   const common = commonInterests(a, b)
+  // TURN credentials only go to matched users (null → clients use their default STUN)
+  const iceServers = getIceServers() ?? undefined
 
   // Only reveal a peer's country if they have a country resolved (privacy mode = no country sent)
-  io.to(a.socketId).emit('matched', { roomId, initiator: true,  peerCountry: b.country, commonInterests: common })
-  io.to(b.socketId).emit('matched', { roomId, initiator: false, peerCountry: a.country, commonInterests: common })
+  io.to(a.socketId).emit('matched', { roomId, initiator: true,  peerCountry: b.country, commonInterests: common, iceServers })
+  io.to(b.socketId).emit('matched', { roomId, initiator: false, peerCountry: a.country, commonInterests: common, iceServers })
 
   // Track match start time in both log entries
   const matchedAt = Date.now()

@@ -36,7 +36,7 @@ cd web && npm run dev      # :3000
 |---|---|
 | Frontend | Next.js 16, TypeScript, Tailwind CSS |
 | Realtime | Socket.io (client in `web/lib/socket.ts`) |
-| Video | WebRTC P2P — Google STUN, no TURN |
+| Video | WebRTC P2P — Cloudflare Realtime TURN/STUN (credentials from server, sent in `matched`), STUN-only fallback |
 | Auth | Supabase (email/password) |
 | DB | Supabase (Postgres) |
 | Payments | Stripe (live mode, USD) |
@@ -88,6 +88,8 @@ Always use CSS vars for theming — never hardcode colors in components.
 |---|---|
 | `src/index.ts` | Express + Socket.io bootstrap, `/health`, `/stats` endpoints, CORS |
 | `src/matchmaking.ts` | Queue, pairing, WebRTC signaling relay, interest/gender/country logic |
+| `src/supabase.ts` | Supabase REST helpers (boost verification, connection_logs, reports) |
+| `src/turn.ts` | Cloudflare TURN credentials (cached, refreshed server-side) |
 
 ---
 
@@ -114,6 +116,8 @@ SUPABASE_URL
 SUPABASE_SERVICE_ROLE_KEY
 ALLOWED_ORIGINS=https://randoo.fun,https://www.randoo.fun,https://randoo-psi.vercel.app,http://localhost:3000
 STATS_SECRET
+CLOUDFLARE_TURN_KEY_ID      # Cloudflare Realtime TURN key — optional, STUN only if unset
+CLOUDFLARE_TURN_API_TOKEN
 ```
 
 ---
@@ -136,7 +140,7 @@ Auth users have `gender` stored in `user_metadata.gender` — this is the source
 Client → Server   join({ sessionId, gender, wantGender?, boostToken?, interests[], countries[], maxWait, privacyMode, isBot, referrer, device_type, os, screen })
                     → always closes the socket's current room first (peer gets peer-disconnected)
 Server → Client   waiting
-Server → Client   matched({ roomId, initiator, peerCountry?, commonInterests[] })
+Server → Client   matched({ roomId, initiator, peerCountry?, commonInterests[], iceServers? })
 Client → Server   offer / answer / ice-candidate  { roomId, … }  (relayed only if sender is in roomId;
                     relayed payload echoes roomId so clients drop messages from an old match)
 Client → Server   next({ roomId })        (ignored if roomId is not the sender's current room)
@@ -196,7 +200,7 @@ Password-protected internal dashboard. Shows:
 
 ## Constraints & known limitations
 
-- No TURN server — WebRTC may fail on restrictive networks (corporate, some mobile)
+- TURN via Cloudflare (1 000 GB/month free, then $0.05/GB) — if the env vars are missing or Cloudflare is down, clients fall back to STUN only
 - In-memory queue and rooms on Railway — resets on redeploy
 - `connection_logs` has no `user_id` — returning visitor tracking is IP-based only
 - `listUsers` fetches up to 1000 users — will need pagination when scaling

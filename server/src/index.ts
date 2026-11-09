@@ -4,6 +4,7 @@ import { createServer } from 'http'
 import { Server } from 'socket.io'
 import cors from 'cors'
 import { setupMatchmaking, getStats } from './matchmaking'
+import { warmUpTurn } from './turn'
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
@@ -41,6 +42,7 @@ app.get('/stats', (req, res) => {
 })
 
 setupMatchmaking(io)
+warmUpTurn().catch(() => {})
 
 const PORT = process.env.PORT || 3001
 httpServer.listen(PORT, () => {

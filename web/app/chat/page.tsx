@@ -415,7 +415,7 @@ function ChatContent() {
       socket.on('waiting', () => setStatus('waiting'))
       socket.on('online-count', (n: number) => setOnlineCount(n))
 
-      socket.on('matched', async ({ roomId, initiator, peerCountry, commonInterests }: { roomId: string; initiator: boolean; peerCountry?: string; commonInterests?: string[] }) => {
+      socket.on('matched', async ({ roomId, initiator, peerCountry, commonInterests, iceServers }: { roomId: string; initiator: boolean; peerCountry?: string; commonInterests?: string[]; iceServers?: RTCIceServer[] }) => {
         resetPeer()
         roomIdRef.current = roomId
         setStatus('matched')
@@ -456,7 +456,7 @@ function ChatContent() {
             console.warn('[webrtc] connection failed — rejoining queue')
             rejoin()
           },
-        })
+        }, iceServers)
 
         if (initiator) {
           try {
