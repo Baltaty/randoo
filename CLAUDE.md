@@ -86,7 +86,7 @@ Always use CSS vars for theming — never hardcode colors in components.
 ### Server (`server/`)
 | File | Role |
 |---|---|
-| `src/index.ts` | Express + Socket.io bootstrap, `/health`, `/stats` endpoints, CORS |
+| `src/index.ts` | Express + Socket.io bootstrap, `/health` (online count + `turn`: ok/not_configured/error/pending), `/stats` endpoints, CORS |
 | `src/matchmaking.ts` | Queue, pairing, WebRTC signaling relay, interest/gender/country logic |
 | `src/supabase.ts` | Supabase REST helpers (boost verification, connection_logs, reports) |
 | `src/turn.ts` | Cloudflare TURN credentials (cached, refreshed server-side) |

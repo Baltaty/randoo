@@ -71,6 +71,15 @@ export function getIceServers(): IceServer[] | null {
   return cached && cached.expiresAt > now ? cached.iceServers : null
 }
 
+export type TurnStatus = 'ok' | 'not_configured' | 'error' | 'pending'
+
+/** TURN health for /health — no secrets exposed. */
+export function getTurnStatus(): TurnStatus {
+  if (!isConfigured()) return 'not_configured'
+  if (cached && cached.expiresAt > Date.now()) return 'ok'
+  return lastFailureAt ? 'error' : 'pending'
+}
+
 /** Fetch credentials at boot so the first matches already have TURN. */
 export async function warmUpTurn(): Promise<void> {
   if (!isConfigured()) {

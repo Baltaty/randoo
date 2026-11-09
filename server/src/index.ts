@@ -4,7 +4,7 @@ import { createServer } from 'http'
 import { Server } from 'socket.io'
 import cors from 'cors'
 import { setupMatchmaking, getStats } from './matchmaking'
-import { warmUpTurn } from './turn'
+import { warmUpTurn, getTurnStatus } from './turn'
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
@@ -25,10 +25,11 @@ const io = new Server(httpServer, {
   maxHttpBufferSize: 64 * 1024,
 })
 
-// Health endpoint — exposes live online count
+// Health endpoint — exposes live online count + TURN status (ok | not_configured | error | pending)
 app.get('/health', (_req, res) => res.json({
   status: 'ok',
   onlineCount: io.engine.clientsCount,
+  turn: getTurnStatus(),
 }))
 
 // Stats endpoint — used by /cockpit (protected by STATS_SECRET)
