@@ -1,0 +1,24 @@
+server/src/turn.ts
+  s_105331ee91f7bb::t_459d33c48a5541 74-82
+server/src/index.ts
+  s_105331ee91f7bb::t_10919826115c8b 7
+  s_105331ee91f7bb::t_ba8a990a57024f 28,32
+CLAUDE.md
+  s_105331ee91f7bb::t_11a82ebc975605 89
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e009dae952670222ab0d0a55dabf22de68733ffb",
+  "prompts": {},
+  "sessions": {
+    "s_105331ee91f7bb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b47bf7fd-b096-48d2-9dec-06625977c14f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Baltaty <illchangeafrica@gmail.com>"
+    }
+  }
+}
