@@ -22,21 +22,21 @@ export default function PasswordForm() {
     if (res.ok) {
       router.refresh()
     } else {
-      setError('Wrong password')
+      setError(res.status === 429 ? 'Trop de tentatives — réessaie dans 15 minutes' : 'Mot de passe incorrect')
       setPass('')
     }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center" style={{ background: '#0a0a0a' }}>
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--theme-bg)' }}>
       <form onSubmit={submit} className="w-full max-w-sm px-4">
         <div className="flex items-center gap-2 mb-8">
           <svg width="18" height="22" viewBox="0 0 44 52" fill="none">
             <path d="M 10 18 C 10 8 34 8 34 18 C 34 26 24 28 22 32"
-              stroke="#ffd53a" strokeWidth="9" strokeLinecap="round"/>
-            <circle cx="22" cy="46" r="5" fill="#ffd53a"/>
+              stroke="var(--color-brand-primary)" strokeWidth="9" strokeLinecap="round"/>
+            <circle cx="22" cy="46" r="5" fill="var(--color-brand-primary)"/>
           </svg>
-          <span className="font-bold text-white text-lg" style={{ letterSpacing: '-0.5px' }}>
+          <span className="font-bold text-lg" style={{ letterSpacing: '-0.5px', color: 'var(--theme-text)' }}>
             cockpit
           </span>
         </div>
@@ -45,23 +45,23 @@ export default function PasswordForm() {
           type="password"
           value={pass}
           onChange={e => setPass(e.target.value)}
-          placeholder="Password"
+          placeholder="Mot de passe"
           autoFocus
           className="w-full px-4 py-3 rounded-xl text-sm outline-none mb-3"
-          style={{ background: '#141414', color: 'white', border: '1px solid #272727' }}
+          style={{ background: 'var(--theme-surface-solid)', color: 'var(--theme-text)', border: '1px solid var(--theme-border)' }}
         />
 
         {error && (
-          <p className="text-sm mb-3" style={{ color: '#f02031' }}>{error}</p>
+          <p className="text-sm mb-3" style={{ color: 'var(--color-error)' }}>{error}</p>
         )}
 
         <button
           type="submit"
           disabled={loading || !pass}
           className="w-full py-3 rounded-xl font-bold text-sm transition-all hover:brightness-90 active:scale-95 disabled:opacity-40"
-          style={{ background: '#ffd53a', color: '#0a0a0a' }}
+          style={{ background: 'var(--theme-accent)', color: 'var(--theme-btn-fg)' }}
         >
-          {loading ? 'Checking…' : 'Enter'}
+          {loading ? 'Vérification…' : 'Entrer'}
         </button>
       </form>
     </div>

@@ -180,7 +180,7 @@ function ChatContent() {
   const { user } = useAuth()
   // Socket handlers are registered once — read translations through a ref
   const i18nRef = useRef({ t, lang })
-  i18nRef.current = { t, lang }
+  useEffect(() => { i18nRef.current = { t, lang } }, [t, lang])
 
   // URL params (present only when coming directly from boost/success)
   const urlBoostToken   = searchParams.get('boost')        || undefined
@@ -195,7 +195,7 @@ function ChatContent() {
   const [resolvedBoost, setResolvedBoost] = useState<ActiveBoost | null>(null)
   // Ref so joinQueue always reads the latest boost without being a dep
   const boostRef = useRef<ActiveBoost | null>(null)
-  boostRef.current = resolvedBoost
+  useEffect(() => { boostRef.current = resolvedBoost }, [resolvedBoost])
 
   const localVideoRef  = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
@@ -207,7 +207,7 @@ function ChatContent() {
   const sessionIdRef       = useRef<string>(crypto.randomUUID())
   // Always up-to-date user ref — avoids race condition between auth loading and socket connect
   const userRef            = useRef(user)
-  userRef.current          = user
+  useEffect(() => { userRef.current = user }, [user])
 
   const [status, setStatusState]          = useState<Status>('connecting')
   // Mirror of `status` readable from socket handlers / stale closures
@@ -271,19 +271,6 @@ function ChatContent() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When user metadata loads (async), update gender in settings and re-join if still waiting
-  useEffect(() => {
-    const metaGender = user?.user_metadata?.gender
-    if (!metaGender) return
-    settingsRef.current.yourSex = metaGender
-    // If socket already connected but user wasn't loaded yet, re-join with correct gender
-    // Read the live status (not the render-time one) so we never tear down an active match
-    const socket = getSocket()
-    if (socket.connected && statusRef.current === 'waiting') {
-      joinQueue()
-    }
-  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
-
   // Boost countdown — driven by resolvedBoost (survives navigation)
   useEffect(() => {
     if (!resolvedBoost) return
@@ -338,7 +325,20 @@ function ChatContent() {
       referrer:    typeof document !== 'undefined' ? (document.referrer || undefined) : undefined,
       ...( typeof window !== 'undefined' ? getDeviceInfo() : {} ),
     })
-  }, [urlWantGender, urlBoostToken]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isBot])
+
+  // When user metadata loads (async), update gender in settings and re-join if still waiting
+  useEffect(() => {
+    const metaGender = user?.user_metadata?.gender
+    if (!metaGender) return
+    settingsRef.current.yourSex = metaGender
+    // If socket already connected but user wasn't loaded yet, re-join with correct gender
+    // Read the live status (not the render-time one) so we never tear down an active match
+    const socket = getSocket()
+    if (socket.connected && statusRef.current === 'waiting') {
+      joinQueue()
+    }
+  }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Tear down the current peer connection and remote video (no queue change)
   const resetPeer = useCallback(() => {
@@ -435,10 +435,23 @@ function ChatContent() {
         setMatchToast(toast)
         matchToastTimerRef.current = setTimeout(() => setMatchToast(null), 5000)
 
+        // Report the WebRTC outcome once per match (stats for the cockpit)
+        const matchedAt = performance.now()
+        let reported = false
+        const reportCall = (connected: boolean, relay?: boolean) => {
+          if (reported || roomIdRef.current !== roomId) return
+          reported = true
+          socket.emit('call-status', {
+            roomId, connected, relay,
+            setupMs: connected ? Math.round(performance.now() - matchedAt) : undefined,
+          })
+        }
+
         // Safety net: if the peer connection isn't established in time, the match failed
         // (peer gone, ICE stuck in 'new', unreachable NAT without TURN…) → next match
         connectionTimerRef.current = setTimeout(() => {
           if (roomIdRef.current !== roomId) return
+          reportCall(false)
           console.warn('[chat] connection timeout — rejoining queue')
           rejoin()
         }, CONNECTION_TIMEOUT_MS)
@@ -449,10 +462,13 @@ function ChatContent() {
             if (roomIdRef.current === roomId) socket.emit('ice-candidate', { roomId, candidate: c.toJSON() })
           },
           onConnected: () => {
-            if (roomIdRef.current === roomId) clearConnectionTimer()
+            if (roomIdRef.current !== roomId) return
+            clearConnectionTimer()
+            webrtc.isRelayed().then(relay => reportCall(true, relay))
           },
           onConnectionFailed: () => {
             if (roomIdRef.current !== roomId) return
+            reportCall(false)
             console.warn('[webrtc] connection failed — rejoining queue')
             rejoin()
           },

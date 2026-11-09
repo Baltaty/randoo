@@ -46,7 +46,8 @@ interface Point {
 
 export default function LiveGlobe({ log }: { log: LogEntry[] }) {
   const { points, arcs } = useMemo(() => {
-    const now = Date.now()
+    // Pure: "recent" is relative to the newest visit, not the wall clock
+    const now = log.reduce((m, e) => Math.max(m, e.ts), 0)
     const counts: Record<string, { count: number; latestTs: number }> = {}
     for (const e of log) {
       if (!e.country || !COORDS[e.country]) continue
@@ -93,7 +94,7 @@ export default function LiveGlobe({ log }: { log: LogEntry[] }) {
   if (log.length === 0) {
     return (
       <div className="flex items-center justify-center" style={{ height: 680 }}>
-        <p className="text-xs" style={{ color: '#333' }}>No data yet</p>
+        <p className="text-xs" style={{ color: 'var(--theme-text-muted)' }}>Aucune donnée</p>
       </div>
     )
   }
@@ -116,7 +117,7 @@ export default function LiveGlobe({ log }: { log: LogEntry[] }) {
         pointColor={(d) => (d as Point).recent ? '#ffd53a' : '#ff66b3'}
         pointLabel={(d) => {
           const p = d as Point
-          return `<div style="background:#111;border:1px solid #272727;padding:6px 10px;border-radius:8px;font-size:12px;color:white">${p.country} · ${p.count} connection${p.count > 1 ? 's' : ''}</div>`
+          return `<div style="background:#111;border:1px solid #272727;padding:6px 10px;border-radius:8px;font-size:12px;color:white">${p.country} · ${p.count} visite${p.count > 1 ? 's' : ''}</div>`
         }}
         // Rings on recent countries
         ringsData={points.filter(p => p.recent)}

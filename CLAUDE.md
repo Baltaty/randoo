@@ -76,7 +76,11 @@ Always use CSS vars for theming — never hardcode colors in components.
 | `app/api/webhook/route.ts` | Stripe webhook → inserts `boost_sessions` |
 | `app/api/boost-status/route.ts` | Polls `boost_sessions` by `stripe_session_id` |
 | `app/api/account/route.ts` | DELETE: wipes user data + Supabase auth user |
-| `app/api/cockpit/stats/route.ts` | Aggregates live + Supabase stats for cockpit |
+| `app/api/cockpit/live/route.ts` | Live metrics proxied from the server `/stats` (polled every 5 s) |
+| `app/api/cockpit/stats/route.ts` | Period stats via the `cockpit_stats()` Postgres function (+ previous period) |
+| `app/api/cockpit/visits/route.ts` | Paginated recent visits (IPs masked) |
+| `lib/cockpit-auth.ts` | Signed, expiring cockpit session cookie + login rate limit |
+| `lib/cockpit-data.ts` | Europe/Paris time ranges, IP masking |
 | `lib/webrtc.ts` | WebRTCManager class |
 | `lib/socket.ts` | Socket.io singleton (uses `NEXT_PUBLIC_SERVER_URL`) |
 | `lib/i18n.ts` | EN/FR translations |
@@ -126,8 +130,9 @@ CLOUDFLARE_TURN_API_TOKEN
 
 | Table | Purpose |
 |---|---|
-| `boost_sessions` | One row per completed Stripe purchase — `plan`, `session_token`, `want_gender`, `expires_at`, `stripe_session_id` |
-| `connection_logs` | One row per user connection — `ts`, `ip`, `country`, `gender`, `interests`, `duration` |
+| `boost_sessions` | One row per completed Stripe purchase — `plan`, `session_token`, `want_gender`, `expires_at`, `stripe_session_id`, `amount_cents` (paid) |
+| `connection_logs` | One row per visit (socket) — `ts`, `ip`, `country`, `gender`, `interests`, `duration` (total chat s), `matches`, referrer/device. Before 2026-11-09: one row per join |
+| `matches` | One row per conversation — `room_id`, `started_at`, `duration`, `connected`, `relay`, `setup_ms`, `wait_ms_a/b` |
 | `reports` | User reports — `ts`, `reporter_ip`, `room_id`, `reason` |
 
 Auth users have `gender` stored in `user_metadata.gender` — this is the source of truth, not localStorage.
@@ -146,6 +151,7 @@ Client → Server   offer / answer / ice-candidate  { roomId, … }  (relayed on
 Client → Server   next({ roomId })        (ignored if roomId is not the sender's current room)
 Client → Server   report({ roomId, reason })  (reason ∈ nudity|spam|harassment|underage|other, once per room)
 Server → Client   peer-disconnected({ roomId })
+Client → Server   call-status({ roomId, connected, relay?, setupMs? })  (WebRTC outcome — cockpit stats)
 Server → Client   online-count(n)         (throttled: at most every 2 s)
 ```
 
@@ -171,15 +177,14 @@ Server → Client   online-count(n)         (throttled: at most every 2 s)
 
 ## Cockpit (`/cockpit`)
 
-Password-protected internal dashboard. Shows:
-- Live: online users, queue, active chats, avg chat duration
-- Today / This week / This month / All time: revenue, boosts, signups
-- Signup → boost conversion rate
-- Boost plan breakdown (10min / 30min / 1h)
-- Top countries, gender split, top interests (computed from last 200 connection_log entries)
-- Returning visitors table (all-time, IP-based, ≥ 2 sessions)
-- Live globe (WebGL, `react-globe.gl`)
-- Recent connections table
+Internal dashboard (French, Europe/Paris), protected by `COCKPIT_PASSWORD` → signed session cookie `cockpit_session`.
+Requires `supabase/2026-11-09_cockpit.sql` (table `matches`, columns, `cockpit_stats()` function) — shows a banner if missing.
+- **En direct** (5 s, from server memory): online, queue, active chats, median wait, % calls connected, % via TURN, online sparkline (1 h)
+- **Period** selector (Aujourd'hui / 7 j / 30 j / Tout) with deltas vs previous period:
+  business (revenue from Stripe amounts, boosts, buyers, signups, paying accounts), call quality, audience
+  (countries, sources, gender, devices, OS, interests, returning = IP seen on ≥ 2 days), moderation (reports)
+- Recent visits (paginated, masked IPs), lazy 3D globe
+- Charts are dependency-free SVG in `app/cockpit/charts.tsx`
 
 ---
 

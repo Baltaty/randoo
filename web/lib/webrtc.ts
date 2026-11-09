@@ -186,6 +186,30 @@ export class WebRTCManager {
     }
   }
 
+  /** True if the selected ICE candidate pair goes through a TURN relay (undefined if unknown). */
+  async isRelayed(): Promise<boolean | undefined> {
+    const pc = this.pc
+    if (!pc) return undefined
+    try {
+      const stats = await pc.getStats()
+      let pairId: string | undefined
+      stats.forEach(r => {
+        if (r.type === 'transport' && r.selectedCandidatePairId) pairId = r.selectedCandidatePairId
+      })
+      let pair: RTCIceCandidatePairStats | undefined
+      stats.forEach(r => {
+        if (r.type !== 'candidate-pair') return
+        if (pairId ? r.id === pairId : (r.nominated && r.state === 'succeeded')) pair = r as RTCIceCandidatePairStats
+      })
+      if (!pair) return undefined
+      const local  = stats.get(pair.localCandidateId)
+      const remote = stats.get(pair.remoteCandidateId)
+      return local?.candidateType === 'relay' || remote?.candidateType === 'relay'
+    } catch {
+      return undefined
+    }
+  }
+
   toggleMute(): boolean {
     const audioTrack = this.localStream?.getAudioTracks()[0]
     if (!audioTrack) return false

@@ -2,7 +2,7 @@ import { Server, Socket } from 'socket.io'
 import geoip from 'geoip-lite'
 import {
   Gender, LogEntry,
-  verifyBoostToken, sbInsertLog, sbUpdateDuration, sbInsertReport,
+  verifyBoostToken, sbInsertLog, sbUpdateVisit, sbInsertReport, sbInsertMatch, sbUpdateMatch,
 } from './supabase'
 import { getIceServers } from './turn'
 
@@ -20,6 +20,18 @@ interface UserInfo {
   interests:   string[]  // declared interests for soft-priority matching
   maxWait:     number    // seconds before country / free gender preference is relaxed
   relaxed:     boolean   // true once maxWait has elapsed in the queue
+  joinedAt:    number    // epoch ms — queue wait time metrics
+  isBot:       boolean   // internal bots are excluded from stats
+}
+
+// Per-conversation state (stats only)
+interface RoomMeta {
+  startedAt:  number
+  bot:        boolean            // a bot took part — not persisted
+  connected?: boolean
+  relay?:     boolean
+  sample?:    CallSample         // this room's entry in recentCalls
+  inserted:   Promise<void>      // the matches row insert (updates wait for it)
 }
 
 const GENDERS: readonly Gender[] = ['M', 'F', 'O']
@@ -34,6 +46,7 @@ const ONLINE_COUNT_EVERY = 2000 // ms — throttle for online-count broadcasts
 const queue: UserInfo[] = []
 const rooms = new Map<string, [string, string]>() // roomId -> [socketA, socketB]
 const socketRoom = new Map<string, string>()      // socketId -> roomId (at most one room per socket)
+const roomMeta = new Map<string, RoomMeta>()
 const waitTimers = new Map<string, ReturnType<typeof setTimeout>>()
 // Incremented on every join — lets an async join detect it was superseded
 const joinSeq = new Map<string, number>()
@@ -47,6 +60,27 @@ const socketToLog = new Map<string, LogEntry>()
 function addLog(entry: LogEntry) {
   connectionLog.unshift(entry)
   if (connectionLog.length > MAX_LOG) connectionLog.pop()
+}
+
+// ── Live metrics (in memory, last hour) — exposed to the cockpit via /stats ──
+
+const HOUR = 3600e3
+interface MatchSample { ts: number; waitMs: number }
+interface CallSample  { ts: number; connected: boolean; relay: boolean; setupMs?: number }
+const recentMatches: MatchSample[] = []
+const recentCalls:   CallSample[]  = []
+const onlineHistory: Array<{ ts: number; online: number; queue: number; rooms: number }> = []
+
+function prune<T extends { ts: number }>(arr: T[], maxAge = HOUR) {
+  const cutoff = Date.now() - maxAge
+  while (arr.length && arr[0].ts < cutoff) arr.shift()
+}
+
+function median(values: number[]): number | null {
+  if (!values.length) return null
+  const v = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(v.length / 2)
+  return v.length % 2 ? v[mid] : Math.round((v[mid - 1] + v[mid]) / 2)
 }
 
 // ── Input sanitisation ───────────────────────
@@ -197,12 +231,30 @@ function createRoom(a: UserInfo, b: UserInfo, io: Server) {
   io.to(a.socketId).emit('matched', { roomId, initiator: true,  peerCountry: b.country, commonInterests: common, iceServers })
   io.to(b.socketId).emit('matched', { roomId, initiator: false, peerCountry: a.country, commonInterests: common, iceServers })
 
-  // Track match start time in both log entries
+  // Track match start in both visit entries
   const matchedAt = Date.now()
-  const logA = socketToLog.get(a.socketId)
-  const logB = socketToLog.get(b.socketId)
-  if (logA) logA.matchedAt = matchedAt
-  if (logB) logB.matchedAt = matchedAt
+  for (const sid of [a.socketId, b.socketId]) {
+    const log = socketToLog.get(sid)
+    if (log) { log.matchedAt = matchedAt; log.matches = (log.matches ?? 0) + 1 }
+  }
+
+  // Stats — bots excluded
+  const bot = a.isBot || b.isBot
+  const waitA = matchedAt - a.joinedAt
+  const waitB = matchedAt - b.joinedAt
+  if (!bot) recentMatches.push({ ts: matchedAt, waitMs: waitA }, { ts: matchedAt, waitMs: waitB })
+  roomMeta.set(roomId, {
+    startedAt: matchedAt,
+    bot,
+    inserted: bot ? Promise.resolve() : sbInsertMatch({
+      room_id:    roomId,
+      started_at: new Date(matchedAt).toISOString(),
+      wait_ms_a:  waitA,
+      wait_ms_b:  waitB,
+      country_a:  a.country ?? null,
+      country_b:  b.country ?? null,
+    }).catch(() => {}),
+  })
 
   console.log(`[match] ${a.socketId} <-> ${b.socketId} → ${roomId} (queue=${queue.length}, rooms=${rooms.size})`)
 }
@@ -220,15 +272,24 @@ function leaveRoom(socketId: string, io: Server) {
   if (socketRoom.get(peerId) === roomId) socketRoom.delete(peerId)
   io.to(peerId).emit('peer-disconnected', { roomId })
 
-  // Record duration for both participants
+  // Add the conversation time to both visits
   const endedAt = Date.now()
   for (const sid of [socketId, peerId]) {
     const log = socketToLog.get(sid)
     if (log?.matchedAt) {
-      log.duration = Math.floor((endedAt - log.matchedAt) / 1000)
+      log.duration = (log.duration ?? 0) + Math.floor((endedAt - log.matchedAt) / 1000)
       log.matchedAt = undefined
-      sbUpdateDuration(log).catch(() => {})
+      sbUpdateVisit(log).catch(() => {})
     }
+  }
+
+  const meta = roomMeta.get(roomId)
+  roomMeta.delete(roomId)
+  if (meta && !meta.bot) {
+    const duration = Math.floor((endedAt - meta.startedAt) / 1000)
+    meta.inserted
+      .then(() => sbUpdateMatch(roomId, { ended_at: new Date(endedAt).toISOString(), duration }))
+      .catch(() => {})
   }
 
   console.log(`[room] ${roomId} closed — ${socketId} left`)
@@ -245,7 +306,22 @@ function getPeer(socketId: string, roomId: unknown): string | null {
 // ── Setup ────────────────────────────────────
 
 export function getStats() {
-  return { queue: queue.length, rooms: rooms.size, log: connectionLog }
+  prune(recentMatches); prune(recentCalls); prune(onlineHistory)
+  const connected = recentCalls.filter(c => c.connected)
+  return {
+    queue: queue.length,
+    rooms: rooms.size,
+    log:   connectionLog,
+    lastHour: {
+      matches:       recentMatches.length / 2,
+      medianWaitMs:  median(recentMatches.map(m => m.waitMs)),
+      callsReported: recentCalls.length,
+      callsConnected: connected.length,
+      callsRelay:    connected.filter(c => c.relay).length,
+      medianSetupMs: median(connected.flatMap(c => c.setupMs !== undefined ? [c.setupMs] : [])),
+    },
+    history: onlineHistory,
+  }
 }
 
 export function setupMatchmaking(io: Server) {
@@ -258,6 +334,14 @@ export function setupMatchmaking(io: Server) {
       io.emit('online-count', io.engine.clientsCount)
     }, ONLINE_COUNT_EVERY)
   }
+
+  // Sample online / queue / rooms every minute for the cockpit sparkline
+  const sample = () => {
+    onlineHistory.push({ ts: Date.now(), online: io.engine.clientsCount, queue: queue.length, rooms: rooms.size })
+    prune(onlineHistory)
+  }
+  sample()
+  setInterval(sample, 60e3).unref()
 
   io.on('connection', (socket: Socket) => {
     console.log(`[+] ${socket.id}`)
@@ -292,7 +376,9 @@ export function setupMatchmaking(io: Server) {
       const country     = privacyMode ? undefined : countryOf(ip)
       const interests   = sanitizeInterests(data.interests)
 
-      if (data.isBot !== true) {
+      const isBot = data.isBot === true
+      // One connection_logs row per visit (socket) — later joins reuse it
+      if (!isBot && !socketToLog.has(socket.id)) {
         const logEntry: LogEntry = {
           ts:          Date.now(),
           ip,
@@ -303,6 +389,8 @@ export function setupMatchmaking(io: Server) {
           device_type: optString(data.device_type, 32),
           os:          optString(data.os, 32),
           screen:      optString(data.screen, 32),
+          duration:    0,
+          matches:     0,
         }
         addLog(logEntry)
         socketToLog.set(socket.id, logEntry)
@@ -325,6 +413,8 @@ export function setupMatchmaking(io: Server) {
         interests,
         maxWait,
         relaxed:        false,
+        joinedAt:       Date.now(),
+        isBot,
       }
 
       // Try strict match (gender + country)
@@ -377,6 +467,39 @@ export function setupMatchmaking(io: Server) {
       // Ignore a stale "next" aimed at a room we already left
       if (typeof roomId === 'string' && socketRoom.get(socket.id) !== roomId) return
       leaveRoom(socket.id, io)
+    })
+
+    // Client reports whether WebRTC connected (and through TURN) — stats only
+    socket.on('call-status', (raw: unknown) => {
+      const { roomId, connected, relay, setupMs } = asObject(raw)
+      if (typeof roomId !== 'string' || !getPeer(socket.id, roomId)) return
+      if (typeof connected !== 'boolean') return
+      const meta = roomMeta.get(roomId)
+      if (!meta || meta.bot) return
+      const isRelay = relay === true
+      const setup = typeof setupMs === 'number' && Number.isFinite(setupMs) && setupMs >= 0 && setupMs < 120e3
+        ? Math.round(setupMs) : undefined
+      // Each peer reports once; the room counts once (first report, upgraded if the other side connected)
+      const first = meta.connected === undefined
+      const nowConnected = (meta.connected ?? false) || connected
+      const nowRelay = (meta.relay ?? false) || (connected && isRelay)
+      if (!first && nowConnected === meta.connected && nowRelay === meta.relay) return
+      if (!meta.sample) {
+        meta.sample = { ts: Date.now(), connected: false, relay: false }
+        recentCalls.push(meta.sample)
+      }
+      meta.sample.connected = nowConnected
+      meta.sample.relay = nowRelay
+      if (connected && setup !== undefined && meta.sample.setupMs === undefined) meta.sample.setupMs = setup
+      meta.connected = nowConnected
+      meta.relay = nowRelay
+      meta.inserted
+        .then(() => sbUpdateMatch(roomId, {
+          connected: nowConnected,
+          relay: nowRelay,
+          ...(connected && setup !== undefined ? { setup_ms: setup } : {}),
+        }))
+        .catch(() => {})
     })
 
     socket.on('report', (raw: unknown) => {

@@ -12,8 +12,9 @@ export interface LogEntry {
   device_type?: string
   os?:         string
   screen?:     string
-  matchedAt?:  number   // epoch ms when matched
-  duration?:   number   // seconds of conversation
+  matchedAt?:  number   // epoch ms when the current conversation started
+  duration?:   number   // total seconds of conversation during this visit
+  matches?:    number   // conversations during this visit
   supabaseId?: string   // uuid of the row in connection_logs
 }
 
@@ -78,11 +79,44 @@ export async function sbInsertLog(entry: LogEntry): Promise<void> {
   } catch { /* ignore — in-memory log is the fallback */ }
 }
 
-export async function sbUpdateDuration(entry: LogEntry): Promise<void> {
-  if (!entry.supabaseId || entry.duration === undefined) return
-  await sbFetch(`connection_logs?id=eq.${encodeURIComponent(entry.supabaseId)}`, {
+// Update the visit row (one per socket connection). Falls back to `duration`
+// only if the `matches` column doesn't exist yet (migration not applied).
+export async function sbUpdateVisit(entry: LogEntry): Promise<void> {
+  if (!entry.supabaseId) return
+  const path = `connection_logs?id=eq.${encodeURIComponent(entry.supabaseId)}`
+  const res = await sbFetch(path, {
     method: 'PATCH',
-    body: JSON.stringify({ duration: entry.duration }),
+    body: JSON.stringify({ duration: entry.duration ?? 0, matches: entry.matches ?? 0 }),
+  })
+  if (res && res.status === 400) {
+    await sbFetch(path, { method: 'PATCH', body: JSON.stringify({ duration: entry.duration ?? 0 }) })
+  }
+}
+
+// ── matches (one row per conversation) — no-ops if the table doesn't exist yet ──
+
+export interface MatchRow {
+  room_id:     string
+  started_at?: string
+  ended_at?:   string
+  duration?:   number
+  connected?:  boolean
+  relay?:      boolean
+  setup_ms?:   number
+  wait_ms_a?:  number
+  wait_ms_b?:  number
+  country_a?:  string | null
+  country_b?:  string | null
+}
+
+export async function sbInsertMatch(row: MatchRow): Promise<void> {
+  await sbFetch('matches', { method: 'POST', body: JSON.stringify(row) })
+}
+
+export async function sbUpdateMatch(roomId: string, patch: Partial<MatchRow>): Promise<void> {
+  await sbFetch(`matches?room_id=eq.${encodeURIComponent(roomId)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(patch),
   })
 }
 

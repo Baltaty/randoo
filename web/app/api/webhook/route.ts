@@ -35,14 +35,24 @@ export async function POST(req: NextRequest) {
     const expiresAt  = new Date(Date.now() + minutes * 60 * 1000).toISOString()
     const sessionToken = randomUUID()
 
-    const { error } = await supabaseAdmin.from('boost_sessions').insert({
+    const row = {
       stripe_session_id: session.id,
       session_token:     sessionToken,
       user_id:           userId ?? null,
       want_gender:       wantGender,
       plan,
       expires_at:        expiresAt,
+    }
+    // Amount actually paid (after discounts) — used by the cockpit for revenue
+    let { error } = await supabaseAdmin.from('boost_sessions').insert({
+      ...row,
+      amount_cents: session.amount_total ?? null,
+      currency:     session.currency ?? null,
     })
+    // PGRST204 = column not found (cockpit migration not applied yet) → never lose a purchase
+    if (error?.code === 'PGRST204') {
+      ({ error } = await supabaseAdmin.from('boost_sessions').insert(row))
+    }
 
     if (error) {
       console.error('[webhook] supabase insert error:', error)
