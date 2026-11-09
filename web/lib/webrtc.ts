@@ -3,6 +3,16 @@ const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun1.l.google.com:19302' },
 ]
 
+const VIDEO_CONSTRAINTS: MediaTrackConstraints = { width: { ideal: 1280 }, height: { ideal: 720 } }
+
+export interface PeerCallbacks {
+  onRemoteStream:     (stream: MediaStream) => void
+  onIceCandidate:     (candidate: RTCIceCandidate) => void
+  /** ICE + DTLS established — media can flow (even if the peer has no camera) */
+  onConnected:        () => void
+  onConnectionFailed: () => void
+}
+
 export class WebRTCManager {
   private pc: RTCPeerConnection | null = null
   private localStream: MediaStream | null = null
@@ -11,15 +21,6 @@ export class WebRTCManager {
   private pendingCandidates: RTCIceCandidateInit[] = []
   private hasRemoteDescription = false
 
-  async startLocalStream(videoEl: HTMLVideoElement): Promise<MediaStream> {
-    this.localStream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: true,
-    })
-    videoEl.srcObject = this.localStream
-    return this.localStream
-  }
-
   async startLocalStreamWithDevices(
     videoEl: HTMLVideoElement,
     videoDeviceId?: string,
@@ -27,32 +28,28 @@ export class WebRTCManager {
   ): Promise<MediaStream> {
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: videoDeviceId
-          ? { deviceId: { exact: videoDeviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-          : { width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: videoDeviceId ? { ...VIDEO_CONSTRAINTS, deviceId: { exact: videoDeviceId } } : VIDEO_CONSTRAINTS,
         audio: audioDeviceId ? { deviceId: { exact: audioDeviceId } } : true,
       })
     } catch {
       // Saved device unavailable — fall back to default
-      this.localStream = await navigator.mediaDevices.getUserMedia({
-        video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-        audio: true,
-      })
+      this.localStream = await navigator.mediaDevices.getUserMedia({ video: VIDEO_CONSTRAINTS, audio: true })
     }
     videoEl.srcObject = this.localStream
     return this.localStream
   }
 
-  async switchCamera(videoEl: HTMLVideoElement, deviceId: string): Promise<void> {
-    const s = await navigator.mediaDevices.getUserMedia({
-      video: { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } },
-      audio: false,
-    })
-    const newTrack = s.getVideoTracks()[0]
-    const oldTrack = this.localStream?.getVideoTracks()[0]
+  private async switchTrack(kind: 'audio' | 'video', deviceId: string): Promise<void> {
+    const s = await navigator.mediaDevices.getUserMedia(
+      kind === 'video'
+        ? { video: { ...VIDEO_CONSTRAINTS, deviceId: { exact: deviceId } }, audio: false }
+        : { audio: { deviceId: { exact: deviceId } }, video: false },
+    )
+    const newTrack = (kind === 'video' ? s.getVideoTracks() : s.getAudioTracks())[0]
+    const oldTrack = (kind === 'video' ? this.localStream?.getVideoTracks() : this.localStream?.getAudioTracks())?.[0]
     if (oldTrack) newTrack.enabled = oldTrack.enabled
     if (this.pc) {
-      const sender = this.pc.getSenders().find(s => s.track?.kind === 'video')
+      const sender = this.pc.getSenders().find(snd => snd.track?.kind === kind)
       if (sender) await sender.replaceTrack(newTrack)
     }
     if (this.localStream && oldTrack) {
@@ -60,26 +57,15 @@ export class WebRTCManager {
       oldTrack.stop()
     }
     this.localStream?.addTrack(newTrack)
+  }
+
+  async switchCamera(videoEl: HTMLVideoElement, deviceId: string): Promise<void> {
+    await this.switchTrack('video', deviceId)
     videoEl.srcObject = this.localStream
   }
 
   async switchMicrophone(deviceId: string): Promise<void> {
-    const s = await navigator.mediaDevices.getUserMedia({
-      audio: { deviceId: { exact: deviceId } },
-      video: false,
-    })
-    const newTrack = s.getAudioTracks()[0]
-    const oldTrack = this.localStream?.getAudioTracks()[0]
-    if (oldTrack) newTrack.enabled = oldTrack.enabled
-    if (this.pc) {
-      const sender = this.pc.getSenders().find(s => s.track?.kind === 'audio')
-      if (sender) await sender.replaceTrack(newTrack)
-    }
-    if (this.localStream && oldTrack) {
-      this.localStream.removeTrack(oldTrack)
-      oldTrack.stop()
-    }
-    this.localStream?.addTrack(newTrack)
+    await this.switchTrack('audio', deviceId)
   }
 
   getCurrentVideoDeviceId(): string | undefined {
@@ -90,46 +76,52 @@ export class WebRTCManager {
     return this.localStream?.getAudioTracks()[0]?.getSettings().deviceId
   }
 
-  createPeerConnection(
-    onRemoteStream: (stream: MediaStream) => void,
-    onIceCandidate: (candidate: RTCIceCandidate) => void,
-    onConnectionFailed: () => void,
-  ): RTCPeerConnection {
+  createPeerConnection(cb: PeerCallbacks): RTCPeerConnection {
     // Close any existing connection before creating a new one
-    if (this.pc) {
-      this.pc.oniceconnectionstatechange = null
-      this.pc.ontrack = null
-      this.pc.onicecandidate = null
-      this.pc.close()
-    }
-    this.pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
-    this.pendingCandidates = []
-    this.hasRemoteDescription = false
+    this.closePeerConnection()
+    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS })
+    this.pc = pc
 
-    // Add local tracks
-    this.localStream?.getTracks().forEach(track => {
-      this.pc!.addTrack(track, this.localStream!)
-    })
+    // Add local tracks. If camera/mic is missing, still negotiate a receive-only
+    // m-line — otherwise the SDP has no media sections and nothing flows either way.
+    const stream = this.localStream
+    for (const kind of ['audio', 'video'] as const) {
+      const track = stream?.getTracks().find(t => t.kind === kind)
+      if (track && stream) pc.addTrack(track, stream)
+      else pc.addTransceiver(kind, { direction: 'recvonly' })
+    }
 
     // Remote stream
-    this.pc.ontrack = (event) => {
-      onRemoteStream(event.streams[0])
+    pc.ontrack = (event) => {
+      cb.onRemoteStream(event.streams[0] ?? new MediaStream([event.track]))
     }
 
     // ICE candidates
-    this.pc.onicecandidate = (event) => {
-      if (event.candidate) onIceCandidate(event.candidate)
+    pc.onicecandidate = (event) => {
+      if (event.candidate) cb.onIceCandidate(event.candidate)
     }
 
-    // Detect failed/disconnected ICE → caller will rejoin queue
-    this.pc.oniceconnectionstatechange = () => {
-      const state = this.pc?.iceConnectionState
-      if (state === 'failed' || state === 'closed') {
-        onConnectionFailed()
+    // Connected / failed → caller clears its timeout or rejoins the queue
+    let settled = false
+    pc.onconnectionstatechange = () => {
+      if (this.pc !== pc || settled) return
+      if (pc.connectionState === 'connected') {
+        cb.onConnected()
+      } else if (pc.connectionState === 'failed') {
+        settled = true
+        cb.onConnectionFailed()
+      }
+    }
+    // Older Safari: connectionState may lag — also watch ICE state
+    pc.oniceconnectionstatechange = () => {
+      if (this.pc !== pc || settled) return
+      if (pc.iceConnectionState === 'failed') {
+        settled = true
+        cb.onConnectionFailed()
       }
     }
 
-    return this.pc
+    return pc
   }
 
   async createOffer(): Promise<RTCSessionDescriptionInit> {
@@ -178,14 +170,16 @@ export class WebRTCManager {
 
   private async _flushPendingCandidates() {
     this.hasRemoteDescription = true
-    for (const c of this.pendingCandidates) {
+    const pc = this.pc
+    const pending = this.pendingCandidates
+    this.pendingCandidates = []
+    for (const c of pending) {
       try {
-        await this.pc!.addIceCandidate(new RTCIceCandidate(c))
+        await pc?.addIceCandidate(new RTCIceCandidate(c))
       } catch {
         // ignore
       }
     }
-    this.pendingCandidates = []
   }
 
   toggleMute(): boolean {
@@ -203,10 +197,18 @@ export class WebRTCManager {
   }
 
   closePeerConnection() {
-    this.pc?.close()
+    const pc = this.pc
     this.pc = null
     this.pendingCandidates = []
     this.hasRemoteDescription = false
+    if (pc) {
+      // Detach handlers so a closing connection can't fire callbacks into the next match
+      pc.ontrack = null
+      pc.onicecandidate = null
+      pc.onconnectionstatechange = null
+      pc.oniceconnectionstatechange = null
+      pc.close()
+    }
   }
 
   destroy() {

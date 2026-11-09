@@ -12,13 +12,18 @@ import SettingsContent from '@/components/SettingsContent'
 type Status = 'connecting' | 'waiting' | 'matched' | 'disconnected'
 
 // ISO 3166-1 alpha-2 → flag emoji + display name
-function countryInfo(code: string): { flag: string; name: string } {
+function countryInfo(code: string, lang: string): { flag: string; name: string } {
   const flag = code.toUpperCase().split('').map(c =>
     String.fromCodePoint(0x1F1E6 + c.charCodeAt(0) - 65)
   ).join('')
-  const name = new Intl.DisplayNames(['en'], { type: 'region' }).of(code) ?? code
+  let name = code
+  try { name = new Intl.DisplayNames([lang], { type: 'region' }).of(code) ?? code } catch {}
   return { flag, name }
 }
+
+// How long a fresh match may take to establish ICE/DTLS before we give up.
+// Mobile networks without TURN can take several seconds to gather candidates.
+const CONNECTION_TIMEOUT_MS = 15_000
 
 // Subset of settings used in chat
 interface ChatSettings {
@@ -171,8 +176,11 @@ function getDeviceInfo(): { device_type: string; os: string; screen: string } {
 function ChatContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { t } = useI18n()
+  const { t, lang } = useI18n()
   const { user } = useAuth()
+  // Socket handlers are registered once — read translations through a ref
+  const i18nRef = useRef({ t, lang })
+  i18nRef.current = { t, lang }
 
   // URL params (present only when coming directly from boost/success)
   const urlBoostToken   = searchParams.get('boost')        || undefined
@@ -201,7 +209,13 @@ function ChatContent() {
   const userRef            = useRef(user)
   userRef.current          = user
 
-  const [status, setStatus]               = useState<Status>('connecting')
+  const [status, setStatusState]          = useState<Status>('connecting')
+  // Mirror of `status` readable from socket handlers / stale closures
+  const statusRef                         = useRef<Status>('connecting')
+  const setStatus = useCallback((s: Status) => {
+    statusRef.current = s
+    setStatusState(s)
+  }, [])
   const [isMuted, setIsMuted]             = useState(false)
   const [isCameraOff, setIsCameraOff]     = useState(false)
   const [matchToast, setMatchToast]       = useState<string | null>(null)
@@ -263,8 +277,9 @@ function ChatContent() {
     if (!metaGender) return
     settingsRef.current.yourSex = metaGender
     // If socket already connected but user wasn't loaded yet, re-join with correct gender
+    // Read the live status (not the render-time one) so we never tear down an active match
     const socket = getSocket()
-    if (socket.connected && (status === 'waiting' || status === 'connecting')) {
+    if (socket.connected && statusRef.current === 'waiting') {
       joinQueue()
     }
   }, [user]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -296,9 +311,8 @@ function ChatContent() {
   }
 
   const handleRemoteStream = useCallback((stream: MediaStream) => {
-    clearConnectionTimer() // real peer connected — cancel the timeout
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = stream
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
   const joinQueue = useCallback(() => {
     const s = settingsRef.current
@@ -313,7 +327,8 @@ function ChatContent() {
       sessionId:   sessionIdRef.current,
       privacyMode: s.privacyMode,
       gender:      s.privacyMode ? undefined : myGender,
-      // Boost token (from Stripe payment) unlocks wantGender filter server-side
+      // Boost token (from Stripe payment) unlocks a strict wantGender filter server-side.
+      // Without boost, wantGender is only a preference the server relaxes after maxWait.
       boostToken:  boostRef.current?.token,
       wantGender:  boostRef.current?.wantGender ?? (s.lookingFor === 'all' ? undefined : s.lookingFor),
       countries:   s.countries,
@@ -323,25 +338,39 @@ function ChatContent() {
       referrer:    typeof document !== 'undefined' ? (document.referrer || undefined) : undefined,
       ...( typeof window !== 'undefined' ? getDeviceInfo() : {} ),
     })
-  }, [urlWantGender, urlBoostToken])
+  }, [urlWantGender, urlBoostToken]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleNext = useCallback(() => {
-    const socket = getSocket()
-    const webrtc = webrtcRef.current
+  // Tear down the current peer connection and remote video (no queue change)
+  const resetPeer = useCallback(() => {
     clearConnectionTimer()
-    if (roomIdRef.current) socket.emit('next', { roomId: roomIdRef.current })
-    webrtc.closePeerConnection()
+    webrtcRef.current.closePeerConnection()
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
+  }, [])
 
-    // Combined counter — also incremented on peer-disconnected
+  // Leave the current match (telling the server) and go back to the queue.
+  // The server also closes the room on `join`, so the peer is always notified.
+  const rejoin = useCallback(() => {
+    const roomId = roomIdRef.current
+    if (roomId) getSocket().emit('next', { roomId })
+    resetPeer()
+    joinQueue()
+  }, [resetPeer, joinQueue])
+
+  // Next-clicks + peer-disconnects share one counter for the boost upsell
+  const bumpQueueChange = useCallback(() => {
     queueChangeCountRef.current++
     if (queueChangeCountRef.current >= 10 && !boostRef.current) {
       setShowBoostUpsell(true)
       queueChangeCountRef.current = 0
     }
+  }, [])
 
-    joinQueue()
-  }, [joinQueue]) // eslint-disable-line react-hooks/exhaustive-deps
+  const handleNext = useCallback(() => {
+    // Already searching (or not connected yet) — re-joining would only reset our queue position
+    if (statusRef.current === 'waiting' || statusRef.current === 'connecting') return
+    bumpQueueChange()
+    rejoin()
+  }, [bumpQueueChange, rejoin])
 
   const handleReport = useCallback((reason: string) => {
     const socket = getSocket()
@@ -376,6 +405,10 @@ function ChatContent() {
     const webrtc = webrtcRef.current
     const socket = getSocket()
 
+    // Relayed signaling carries the roomId — drop anything from a previous match.
+    // (Tolerates an older server that doesn't echo roomId.)
+    const isStale = (roomId: unknown) => typeof roomId === 'string' && roomId !== roomIdRef.current
+
     async function init() {
       // Register all handlers BEFORE connecting so no event is missed
       socket.on('connect', joinQueue)
@@ -383,65 +416,80 @@ function ChatContent() {
       socket.on('online-count', (n: number) => setOnlineCount(n))
 
       socket.on('matched', async ({ roomId, initiator, peerCountry, commonInterests }: { roomId: string; initiator: boolean; peerCountry?: string; commonInterests?: string[] }) => {
+        resetPeer()
         roomIdRef.current = roomId
         setStatus('matched')
         if (settingsRef.current.sfxVolume) playMatchSound()
 
-        // Build toast: common interests (if any), then country
+        // Build toast: country (if known), then common interests
+        const { t: tr, lang } = i18nRef.current
         if (matchToastTimerRef.current) clearTimeout(matchToastTimerRef.current)
-        let toast = `You're now connected with a random stranger`
+        let toast = tr('chat.toast.stranger')
         if (peerCountry) {
-          const { flag, name } = countryInfo(peerCountry)
-          toast = `You're now connected with someone from ${name} ${flag}`
+          const { flag, name } = countryInfo(peerCountry, lang)
+          toast = tr('chat.toast.country', { country: name, flag })
         }
         if (commonInterests && commonInterests.length > 0) {
-          toast += ` · Both into: ${commonInterests.join(', ')}`
+          toast += tr('chat.toast.interests', { list: commonInterests.join(', ') })
         }
         setMatchToast(toast)
         matchToastTimerRef.current = setTimeout(() => setMatchToast(null), 5000)
 
-        // Safety net: if no remote stream arrives within 8s, the match failed
-        // (self-match race condition, ICE stuck in 'new', peer immediately gone, etc.)
-        clearConnectionTimer()
+        // Safety net: if the peer connection isn't established in time, the match failed
+        // (peer gone, ICE stuck in 'new', unreachable NAT without TURN…) → next match
         connectionTimerRef.current = setTimeout(() => {
-          console.warn('[chat] connection timeout — no video after 8s, rejoining queue')
-          webrtc.closePeerConnection()
-          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
-          joinQueue()
-        }, 8000)
+          if (roomIdRef.current !== roomId) return
+          console.warn('[chat] connection timeout — rejoining queue')
+          rejoin()
+        }, CONNECTION_TIMEOUT_MS)
 
-        const onIce = (c: RTCIceCandidate) => socket.emit('ice-candidate', { roomId, candidate: c.toJSON() })
-        const onConnectionFailed = () => {
-          console.warn('[webrtc] ICE failed — rejoining queue')
-          clearConnectionTimer()
-          webrtc.closePeerConnection()
-          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
-          joinQueue()
-        }
-        webrtc.createPeerConnection(handleRemoteStream, onIce, onConnectionFailed)
+        webrtc.createPeerConnection({
+          onRemoteStream: handleRemoteStream,
+          onIceCandidate: (c) => {
+            if (roomIdRef.current === roomId) socket.emit('ice-candidate', { roomId, candidate: c.toJSON() })
+          },
+          onConnected: () => {
+            if (roomIdRef.current === roomId) clearConnectionTimer()
+          },
+          onConnectionFailed: () => {
+            if (roomIdRef.current !== roomId) return
+            console.warn('[webrtc] connection failed — rejoining queue')
+            rejoin()
+          },
+        })
+
         if (initiator) {
-          const offer = await webrtc.createOffer()
-          socket.emit('offer', { roomId, offer })
+          try {
+            const offer = await webrtc.createOffer()
+            if (roomIdRef.current === roomId) socket.emit('offer', { roomId, offer })
+          } catch (err) {
+            if (roomIdRef.current !== roomId) return
+            console.warn('[chat] createOffer failed — rejoining queue:', err)
+            rejoin()
+          }
         }
       })
 
-      socket.on('offer', async ({ offer }: { offer: RTCSessionDescriptionInit }) => {
+      socket.on('offer', async ({ roomId, offer }: { roomId?: string; offer: RTCSessionDescriptionInit }) => {
+        if (isStale(roomId) || !roomIdRef.current) return
+        const current = roomIdRef.current
         try {
           const answer = await webrtc.handleOffer(offer)
-          socket.emit('answer', { roomId: roomIdRef.current, answer })
+          if (roomIdRef.current === current) socket.emit('answer', { roomId: current, answer })
         } catch (err) {
+          if (roomIdRef.current !== current) return
           console.warn('[chat] offer handling failed — rejoining queue:', err)
-          webrtc.closePeerConnection()
-          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
-          joinQueue()
+          rejoin()
         }
       })
 
-      socket.on('answer', async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
-        await webrtc.handleAnswer(answer)
+      socket.on('answer', async ({ roomId, answer }: { roomId?: string; answer: RTCSessionDescriptionInit }) => {
+        if (isStale(roomId)) return
+        try { await webrtc.handleAnswer(answer) } catch (err) { console.warn('[chat] answer failed:', err) }
       })
 
-      socket.on('ice-candidate', async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
+      socket.on('ice-candidate', async ({ roomId, candidate }: { roomId?: string; candidate: RTCIceCandidateInit }) => {
+        if (isStale(roomId)) return
         await webrtc.addIceCandidate(candidate)
       })
 
@@ -450,25 +498,21 @@ function ChatContent() {
       socket.on('disconnect', (reason) => {
         console.warn('[socket] disconnected:', reason)
         if (reason !== 'io client disconnect') {
+          roomIdRef.current = null
           setStatus('connecting')
-          webrtc.closePeerConnection()
-          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
+          resetPeer()
         }
       })
 
-      socket.on('peer-disconnected', () => {
-        clearConnectionTimer()
+      socket.on('peer-disconnected', (payload?: { roomId?: string }) => {
+        // Ignore notifications about a room we already left
+        if (isStale(payload?.roomId)) return
+        if (!roomIdRef.current) return
+        roomIdRef.current = null
         if (matchToastTimerRef.current) clearTimeout(matchToastTimerRef.current)
         setMatchToast(null)
-        webrtc.closePeerConnection()
-        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
-
-        // Combined counter with handleNext
-        queueChangeCountRef.current++
-        if (queueChangeCountRef.current >= 10 && !boostRef.current) {
-          setShowBoostUpsell(true)
-          queueChangeCountRef.current = 0
-        }
+        resetPeer()
+        bumpQueueChange()
 
         if (settingsRef.current.autoRollVideo) {
           joinQueue()
@@ -479,7 +523,8 @@ function ChatContent() {
       })
 
       // Start camera before connecting — ensures local tracks are ready when
-      // createPeerConnection is called. Fault-tolerant: socket connects even if camera fails.
+      // createPeerConnection is called. Fault-tolerant: socket connects even if camera fails
+      // (the peer connection then negotiates receive-only media).
       try {
         if (localVideoRef.current) {
           const saved = getSavedDevices()
@@ -505,7 +550,7 @@ function ChatContent() {
       webrtc.destroy()
       disconnectSocket()
     }
-  }, [handleRemoteStream, joinQueue])
+  }, [handleRemoteStream, joinQueue, resetPeer, rejoin, bumpQueueChange, setStatus])
 
   const toggleMute   = () => setIsMuted(webrtcRef.current.toggleMute())
   const toggleCamera = () => setIsCameraOff(webrtcRef.current.toggleCamera())
@@ -618,7 +663,7 @@ function ChatContent() {
           <svg width="11" height="11" viewBox="0 0 44 52" fill="currentColor">
             <path d="M26 0L0 30H18L18 52L44 22H26L26 0Z"/>
           </svg>
-          Boost active — {formatBoostTime(boostSecsLeft)} remaining
+          {t('chat.boost_active', { time: formatBoostTime(boostSecsLeft) })}
         </div>
       )}
 
@@ -677,7 +722,7 @@ function ChatContent() {
             <button
               onClick={() => setShowReportModal(true)}
               className="absolute top-3 right-3 z-20 flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-bold transition-all active:scale-95 hover:brightness-90"
-              style={{ background: '#f02031', color: '#fff', backdropFilter: 'blur(8px)' }}
+              style={{ background: 'var(--color-error)', color: '#fff', backdropFilter: 'blur(8px)' }}
               title={t('chat.report')}
             >
               <FlagIcon />
@@ -720,7 +765,7 @@ function ChatContent() {
           {/* Label */}
           <div className="absolute bottom-3 left-3 z-20 px-2.5 py-1 rounded-lg text-xs font-semibold"
             style={{ background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)', color: 'rgba(255,255,255,0.7)' }}>
-            You
+            {t('chat.you')}
           </div>
 
           {/* Device controls — top-right of local video */}
@@ -744,7 +789,7 @@ function ChatContent() {
                 style={{ color: 'rgba(255,255,255,0.75)' }}
               >
                 <MonitorIcon />
-                <span className="text-[11px] font-medium">Devices</span>
+                <span className="text-[11px] font-medium">{t('chat.devices')}</span>
               </button>
 
               <button
@@ -753,7 +798,7 @@ function ChatContent() {
                 style={{ color: isRemoteMuted ? 'var(--color-error)' : 'rgba(255,255,255,0.75)' }}
               >
                 <SpeakerIcon muted={isRemoteMuted} />
-                <span className="text-[11px] font-medium">Sound ({isRemoteMuted ? 'Off' : 'On'})</span>
+                <span className="text-[11px] font-medium">{t('chat.devices.sound', { state: t(isRemoteMuted ? 'common.off' : 'common.on') })}</span>
               </button>
 
               <button
@@ -762,7 +807,7 @@ function ChatContent() {
                 style={{ color: isCameraOff ? 'var(--color-error)' : 'rgba(255,255,255,0.75)' }}
               >
                 <CamIcon off={isCameraOff} />
-                <span className="text-[11px] font-medium">Video ({isCameraOff ? 'Off' : 'On'})</span>
+                <span className="text-[11px] font-medium">{t('chat.devices.video_state', { state: t(isCameraOff ? 'common.off' : 'common.on') })}</span>
               </button>
 
               <button
@@ -771,7 +816,7 @@ function ChatContent() {
                 style={{ color: isMuted ? 'var(--color-error)' : 'rgba(255,255,255,0.75)' }}
               >
                 <MicIcon muted={isMuted} />
-                <span className="text-[11px] font-medium">Mic ({isMuted ? 'Off' : 'On'})</span>
+                <span className="text-[11px] font-medium">{t('chat.devices.mic', { state: t(isMuted ? 'common.off' : 'common.on') })}</span>
               </button>
             </div>
           )}
@@ -898,7 +943,7 @@ function ChatContent() {
         >
           {/* Header */}
           <div className="flex items-center justify-between px-5 pt-4 pb-3 flex-shrink-0" style={{ borderBottom: '1px solid var(--theme-border)' }}>
-            <span className="font-bold text-base" style={{ color: 'var(--theme-text)' }}>Settings</span>
+            <span className="font-bold text-base" style={{ color: 'var(--theme-text)' }}>{t('nav.settings')}</span>
             <button
               onClick={() => setShowSettingsModal(false)}
               className="w-8 h-8 rounded-full flex items-center justify-center transition-all hover:opacity-70"
@@ -921,7 +966,7 @@ function ChatContent() {
         style={{ background: 'rgba(0,0,0,0.82)', backdropFilter: 'blur(8px)' }}
       >
         <div className="w-full max-w-sm rounded-3xl p-7 flex flex-col items-center text-center"
-          style={{ background: '#111', border: '1px solid #272727' }}>
+          style={{ background: '#111', border: '1px solid var(--theme-border)' }}>
 
           {/* Icon */}
           <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-5"
@@ -966,14 +1011,14 @@ function ChatContent() {
       >
         <div className="w-full max-w-md rounded-2xl p-6" style={{ background: '#111', border: '1px solid var(--theme-border)' }}>
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-white font-bold text-xl">Devices</h2>
+            <h2 className="text-white font-bold text-xl">{t('chat.devices')}</h2>
             <button
               onClick={() => setShowDevicesModal(false)}
               className="text-white/40 hover:text-white transition-colors text-lg leading-none"
             >✕</button>
           </div>
 
-          <p className="text-white/50 text-sm font-semibold mb-2">Audio</p>
+          <p className="text-white/50 text-sm font-semibold mb-2">{t('chat.devices.audio')}</p>
           <select
             value={pendingMicId}
             onChange={e => setPendingMicId(e.target.value)}
@@ -982,14 +1027,14 @@ function ChatContent() {
           >
             {microphones.map(m => (
               <option key={m.deviceId} value={m.deviceId}>
-                {m.label || `Microphone (${m.deviceId.slice(0, 8)})`}
+                {m.label || t('chat.devices.mic_fallback', { id: m.deviceId.slice(0, 8) })}
               </option>
             ))}
           </select>
 
           <div className="my-4" style={{ borderTop: '1px solid var(--theme-border)' }} />
 
-          <p className="text-white/50 text-sm font-semibold mb-2">Video</p>
+          <p className="text-white/50 text-sm font-semibold mb-2">{t('chat.devices.video')}</p>
           <select
             value={pendingCameraId}
             onChange={e => setPendingCameraId(e.target.value)}
@@ -998,7 +1043,7 @@ function ChatContent() {
           >
             {cameras.map(c => (
               <option key={c.deviceId} value={c.deviceId}>
-                {c.label || `Camera (${c.deviceId.slice(0, 8)})`}
+                {c.label || t('chat.devices.cam_fallback', { id: c.deviceId.slice(0, 8) })}
               </option>
             ))}
           </select>
@@ -1009,7 +1054,7 @@ function ChatContent() {
               className="px-8 py-2.5 rounded-full font-bold text-sm transition-all hover:brightness-90 active:scale-95"
               style={{ background: 'white', color: '#000' }}
             >
-              Save
+              {t('chat.devices.save')}
             </button>
           </div>
         </div>

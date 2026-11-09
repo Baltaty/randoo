@@ -20,6 +20,8 @@ app.use(cors({ origin: ALLOWED_ORIGINS }))
 const httpServer = createServer(app)
 const io = new Server(httpServer, {
   cors: { origin: ALLOWED_ORIGINS, methods: ['GET', 'POST'] },
+  // SDP offers/answers are a few KB — cap payloads well below the 1 MB default
+  maxHttpBufferSize: 64 * 1024,
 })
 
 // Health endpoint — exposes live online count

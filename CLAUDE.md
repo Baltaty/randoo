@@ -133,13 +133,16 @@ Auth users have `gender` stored in `user_metadata.gender` — this is the source
 ## Socket events
 
 ```
-Client → Server   join(sessionId, gender, wantGender?, boostToken?, interests[], countries[])
+Client → Server   join({ sessionId, gender, wantGender?, boostToken?, interests[], countries[], maxWait, privacyMode, isBot, referrer, device_type, os, screen })
+                    → always closes the socket's current room first (peer gets peer-disconnected)
 Server → Client   waiting
-Server → Client   matched(roomId, commonInterests[])
-Client → Server   offer / answer / ice-candidate  (WebRTC signaling relay)
-Client → Server   next
-Server → Client   peer-disconnected
-Server → Client   online-count(n)
+Server → Client   matched({ roomId, initiator, peerCountry?, commonInterests[] })
+Client → Server   offer / answer / ice-candidate  { roomId, … }  (relayed only if sender is in roomId;
+                    relayed payload echoes roomId so clients drop messages from an old match)
+Client → Server   next({ roomId })        (ignored if roomId is not the sender's current room)
+Client → Server   report({ roomId, reason })  (reason ∈ nudity|spam|harassment|underage|other, once per room)
+Server → Client   peer-disconnected({ roomId })
+Server → Client   online-count(n)         (throttled: at most every 2 s)
 ```
 
 ---
@@ -149,15 +152,15 @@ Server → Client   online-count(n)
 - **Plans:** $2.99 / 10 min · $7.99 / 30 min · $14.99 / 1 h (Stripe live, USD)
 - **Flow:** `/boost` → POST `/api/create-checkout` → Stripe Checkout → webhook → `boost_sessions` → `/boost/success` polls → localStorage → `/chat`
 - **localStorage key:** `randoo-boost` → `{ token, wantGender, expiresAt }`
-- `wantGender` (gender filter) is only unlocked with a valid, non-expired boost token verified server-side against Supabase
+- The **strict** `wantGender` filter is only unlocked with a valid, non-expired boost token verified server-side against Supabase (without boost it is a preference relaxed after `maxWait`)
 
 ---
 
 ## Matchmaking logic
 
 - **Gender:** declarative — user declares their own gender at signup
-- **wantGender:** only active with valid boost token (verified server-side)
-- **Country:** IP-detected via `geoip-lite` + `x-forwarded-for`; soft filter — relaxed after `maxWait` seconds
+- **wantGender:** strict filter only with a valid boost token (verified server-side, re-checked against `expires_at` while queued). Without boost, the requested gender is a free *preference*, enforced for `maxWait` seconds then relaxed
+- **Country:** IP-detected via `geoip-lite` + `x-forwarded-for`; soft filter — relaxed after `maxWait` seconds (the waiting user stays relaxed for newcomers too)
 - **Interests:** `string[]` sorted by `interestScore` (common interests = higher priority); never blocks a match
 
 ---
