@@ -1,0 +1,19 @@
+server/src/turn.ts
+  s_105331ee91f7bb::t_1a41564e3473d8 17,67-70,74-75,83,88-92,98
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "99d04c8ab828e924cd82219ddb9897c108b8a9c6",
+  "prompts": {},
+  "sessions": {
+    "s_105331ee91f7bb": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b47bf7fd-b096-48d2-9dec-06625977c14f",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "Baltaty <illchangeafrica@gmail.com>"
+    }
+  }
+}
