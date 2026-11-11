@@ -14,6 +14,7 @@ export interface IceServer {
 const CREDENTIAL_TTL_S  = 24 * 3600   // lifetime requested from Cloudflare
 const REFRESH_BEFORE_MS = 12 * 3600e3 // refresh once less than this remains
 const RETRY_AFTER_MS    = 60e3        // back-off after a failed fetch
+const CHECK_EVERY_MS    = 5 * 60e3    // background check, so credentials never expire while idle
 
 let cached: { iceServers: IceServer[]; expiresAt: number } | null = null
 let inflight: Promise<void> | null = null
@@ -63,12 +64,15 @@ function refreshInBackground() {
   inflight = refresh().finally(() => { inflight = null })
 }
 
+function refreshIfNeeded() {
+  if (!cached || cached.expiresAt - Date.now() < REFRESH_BEFORE_MS) refreshInBackground()
+}
+
 /** Current ICE servers (never blocks; triggers a background refresh when needed). */
 export function getIceServers(): IceServer[] | null {
   if (!isConfigured()) return null
-  const now = Date.now()
-  if (!cached || cached.expiresAt - now < REFRESH_BEFORE_MS) refreshInBackground()
-  return cached && cached.expiresAt > now ? cached.iceServers : null
+  refreshIfNeeded()
+  return cached && cached.expiresAt > Date.now() ? cached.iceServers : null
 }
 
 export type TurnStatus = 'ok' | 'not_configured' | 'error' | 'pending'
@@ -76,16 +80,22 @@ export type TurnStatus = 'ok' | 'not_configured' | 'error' | 'pending'
 /** TURN health for /health — no secrets exposed. */
 export function getTurnStatus(): TurnStatus {
   if (!isConfigured()) return 'not_configured'
+  refreshIfNeeded()
   if (cached && cached.expiresAt > Date.now()) return 'ok'
   return lastFailureAt ? 'error' : 'pending'
 }
 
-/** Fetch credentials at boot so the first matches already have TURN. */
+/**
+ * Fetch credentials at boot, then keep them fresh in the background — without this,
+ * an idle server (no matches for 24 h) would let them expire and the next match
+ * would go out without TURN.
+ */
 export async function warmUpTurn(): Promise<void> {
   if (!isConfigured()) {
     console.warn('[turn] CLOUDFLARE_TURN_KEY_ID / CLOUDFLARE_TURN_API_TOKEN not set — STUN only')
     return
   }
+  setInterval(refreshIfNeeded, CHECK_EVERY_MS).unref()
   refreshInBackground()
   await inflight
 }
